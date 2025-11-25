@@ -21,7 +21,8 @@ from pylegend._typing import (
     PyLegendUnion,
     PyLegendOptional,
     PyLegendList,
-    PyLegendSet
+    PyLegendSet,
+    PyLegendTuple
 )
 from pylegend.core.language import (
     PyLegendPrimitive,
@@ -93,5 +94,16 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             level: PyLegendOptional[PyLegendUnion[int, PyLegendInteger, str]] = None,
             inplace: PyLegendUnion[bool, PyLegendBoolean] = True,
             errors: str = "raise",
+    ) -> "PandasApiTdsFrame":
+        pass  # pragma: no cover
+
+    def merge(
+            self,
+            other: "PandasApiTdsFrame",
+            how: PyLegendOptional[str] = "inner",
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
+            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
+            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
+            suffixes: PyLegendOptional[PyLegendTuple[str, str]] = ("_x", "_y"),
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover

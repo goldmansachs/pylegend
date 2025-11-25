@@ -21,6 +21,7 @@ from pylegend._typing import (
     PyLegendSequence,
     PyLegendTypeVar,
     PyLegendList,
+    PyLegendTuple,
     PyLegendSet,
     PyLegendOptional,
     PyLegendCallable,
@@ -172,6 +173,42 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
                 level=level,
                 inplace=inplace,
                 errors=errors
+            )
+        )
+
+    def merge(
+            self,
+            other: "PandasApiTdsFrame",
+            how: PyLegendOptional[str] = "inner",
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
+            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
+            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
+            suffixes: PyLegendOptional[PyLegendTuple[str, str]] = ("_x", "_y"),
+    ) -> "PandasApiTdsFrame":
+        """
+        Pandas-like merge:
+        - Mutually exclusive: `on` vs (`left_on`, `right_on`)
+        - If no keys provided, infer intersection of column names
+        - `how`: inner | left | right | outer (outer mapped to full)
+        - `suffixes`: applied to overlapping non-key columns
+        """
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.merge import (
+            PandasApiMergeFunction
+        )
+        if not isinstance(other, PandasApiTdsFrame):
+            raise ValueError("Expected PandasApiTdsFrame for 'other'")  # pragma: no cover
+        return PandasApiAppliedFunctionTdsFrame(
+            PandasApiMergeFunction(
+                self,
+                other,
+                on=on,
+                left_on=left_on,
+                right_on=right_on,
+                how=how,
+                suffixes=suffixes
             )
         )
 
