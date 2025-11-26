@@ -101,9 +101,14 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             self,
             other: "PandasApiTdsFrame",
             how: PyLegendOptional[str] = "inner",
-            on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
-            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
-            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
-            suffixes: PyLegendOptional[PyLegendTuple[str, str]] = ("_x", "_y"),
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            left_index: PyLegendOptional[bool] = False,
+            right_index: PyLegendOptional[bool] = False,
+            sort: PyLegendOptional[bool] = False,
+            suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]] = ("_x", "_y"),
+            indicator: PyLegendOptional[PyLegendUnion[bool, str]] = False,
+            validate: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover

@@ -55,11 +55,16 @@ __all__: PyLegendSequence[str] = [
 class PandasApiMergeFunction(PandasApiAppliedFunction):
     __base_frame: PandasApiBaseTdsFrame
     __other_frame: PandasApiBaseTdsFrame
-    __on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]]
-    __left_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]]
-    __right_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]]
     __how: PyLegendOptional[str]
-    __suffixes: PyLegendOptional[PyLegendTuple[str, str]]
+    __on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
+    __left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
+    __right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
+    __left_index: PyLegendOptional[bool]
+    __right_index: PyLegendOptional[bool]
+    __sort: PyLegendOptional[bool]
+    __suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]]
+    __indicator: PyLegendOptional[PyLegendUnion[bool, str]]
+    __validate: PyLegendOptional[str]
 
     @classmethod
     def name(cls) -> str:
@@ -69,11 +74,16 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         self,
         base_frame: PandasApiBaseTdsFrame,
         other_frame: PandasApiBaseTdsFrame,
-        on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]],
-        left_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]],
-        right_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]],
         how: PyLegendOptional[str],
-        suffixes: PyLegendOptional[PyLegendTuple[str, str]]
+        on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
+        left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
+        right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
+        left_index: PyLegendOptional[bool],
+        right_index: PyLegendOptional[bool],
+        sort: PyLegendOptional[bool],
+        suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]],
+        indicator: PyLegendOptional[PyLegendUnion[bool, str]],
+        validate: PyLegendOptional[str]
     ) -> None:
         if not isinstance(other_frame, PandasApiBaseTdsFrame):
             raise ValueError("Expected PandasApiBaseTdsFrame for 'other'")  # pragma: no cover
@@ -120,7 +130,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
                     raise ValueError(f"Right key '{rk}' not found")
             return list(zip(left_keys, right_keys))
 
-        # Infer intersection
+        # Infer intersection by default
         inferred = list(set(left_cols) & set(right_cols))
         return [(k, k) for k in inferred]
 
@@ -130,12 +140,12 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         left_row = PandasApiTdsRow.from_tds_frame("left", self.__base_frame)
         right_row = PandasApiTdsRow.from_tds_frame("right", self.__other_frame)
         if not key_pairs:
-            return PyLegendBoolean(PyLegendBooleanLiteralExpression(True))
+            raise ValueError("No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns.")
         expr = None
         for l, r in key_pairs:
             part = (left_row[l] == right_row[r])
             expr = part if expr is None else (expr & part)
-        return expr  # type: ignore
+        return expr
 
     def __join_type(self) -> JoinType:
         how_lower = self.__how.lower()
@@ -155,7 +165,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         right_query = copy_query(self.__other_frame.to_sql_query_object(config))
 
         join_condition_expr = self.__build_condition()
-        if isinstance(join_condition_expr, bool):  # safety
+        if isinstance(join_condition_expr, bool):
             join_condition_expr = PyLegendBoolean(PyLegendBooleanLiteralExpression(join_condition_expr))
         join_sql_expr = join_condition_expr.to_sql_expression(
             {
@@ -252,19 +262,20 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
     def base_frame(self) -> PandasApiBaseTdsFrame:
         return self.__base_frame
 
-    def tds_frame_parameters(self) -> PyLegendList[PandasApiBaseTdsFrame]:
+    def tds_frame_parameters(self) -> PyLegendList["PandasApiBaseTdsFrame"]:
         return [self.__other_frame]
 
     # Columns after merge
-    def calculate_columns(self) -> PyLegendSequence[TdsColumn]:
+    def calculate_columns(self) -> PyLegendSequence["TdsColumn"]:
         key_pairs = self.__derive_key_pairs()
         left_keys_same_name = {l for l, r in key_pairs if l == r}
         left_cols = [c.get_name() for c in self.__base_frame.columns()]
         right_cols = [c.get_name() for c in self.__other_frame.columns()]
 
         overlapping = (set(left_cols) & set(right_cols)) - left_keys_same_name
+
         # Build left columns (apply suffix to overlapping non-key)
-        result_cols: PyLegendList[TdsColumn] = []
+        result_cols: PyLegendSequence["TdsColumn"] = []
         for c in self.__base_frame.columns():
             name = c.get_name()
             if name in overlapping:

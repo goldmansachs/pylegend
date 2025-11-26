@@ -180,10 +180,15 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             self,
             other: "PandasApiTdsFrame",
             how: PyLegendOptional[str] = "inner",
-            on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
-            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
-            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendList[str]]] = None,
-            suffixes: PyLegendOptional[PyLegendTuple[str, str]] = ("_x", "_y"),
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            left_index: PyLegendOptional[bool] = False,
+            right_index: PyLegendOptional[bool] = False,
+            sort: PyLegendOptional[bool] = False,
+            suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]] = ("_x", "_y"),
+            indicator: PyLegendOptional[PyLegendUnion[bool, str]] = False,
+            validate: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         """
         Pandas-like merge:
@@ -204,11 +209,16 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             PandasApiMergeFunction(
                 self,
                 other,
+                how=how,
                 on=on,
                 left_on=left_on,
                 right_on=right_on,
-                how=how,
-                suffixes=suffixes
+                left_index=left_index,
+                right_index=right_index,
+                sort=sort,
+                suffixes=suffixes,
+                indicator=indicator,
+                validate=validate
             )
         )
 
