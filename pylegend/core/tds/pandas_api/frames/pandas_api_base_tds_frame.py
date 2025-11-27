@@ -14,6 +14,7 @@
 
 from abc import ABCMeta, abstractmethod
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -32,7 +33,9 @@ from pylegend.core.database.sql_to_string import (
     SqlToStringFormat
 )
 from pylegend.core.language import PyLegendPrimitive, PyLegendInteger, PyLegendBoolean
+from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
 from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiTdsRow
+from pylegend.core.language.shared.primitives.primitive import PyLegendPrimitiveOrPythonPrimitive
 from pylegend.core.language.shared.tds_row import AbstractTdsRow
 from pylegend.core.sql.metamodel import QuerySpecification
 from pylegend.core.tds.abstract.frames.base_tds_frame import BaseTdsFrame
@@ -48,6 +51,9 @@ from pylegend.extensions.tds.result_handler import (
     ToPandasDfResultHandler,
     PandasDfReadConfig,
 )
+
+if TYPE_CHECKING:
+    from pylegend.core.language.pandas_api.pandas_api_series import Series
 
 __all__: PyLegendSequence[str] = [
     "PandasApiBaseTdsFrame"
@@ -68,6 +74,59 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
 
     def columns(self) -> PyLegendSequence[TdsColumn]:
         return [c.copy() for c in self.__columns]
+
+    def __getitem__(
+            self,
+            key: PyLegendUnion[str, PyLegendList[str], PyLegendBoolean]
+    ) -> PyLegendUnion["PandasApiTdsFrame", "Series"]:
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import \
+            PandasApiAppliedFunctionTdsFrame
+        from pylegend.core.tds.pandas_api.frames.functions.filtering import \
+            PandasApiFilteringFunction
+        from pylegend.core.language.shared.primitives.boolean import PyLegendBoolean
+
+        if isinstance(key, PyLegendBoolean):
+            return PandasApiAppliedFunctionTdsFrame(
+                PandasApiFilteringFunction(self, filter_expr=key)
+            )
+
+        elif isinstance(key, str):
+            for col in self.__columns:
+                if col.get_name() == key:
+                    col_type = col.get_type()
+                    if col_type == "Boolean":
+                        from pylegend.core.language.pandas_api.pandas_api_series import BooleanSeries  # pragma: no cover
+                        return BooleanSeries(self, key)  # pragma: no cover (Boolean column not supported in PURE)
+                    elif col_type == "String":
+                        from pylegend.core.language.pandas_api.pandas_api_series import StringSeries
+                        return StringSeries(self, key)
+                    elif col_type == "Integer":
+                        from pylegend.core.language.pandas_api.pandas_api_series import IntegerSeries
+                        return IntegerSeries(self, key)
+                    elif col_type == "Float":
+                        from pylegend.core.language.pandas_api.pandas_api_series import FloatSeries
+                        return FloatSeries(self, key)
+                    elif col_type == "Date":
+                        from pylegend.core.language.pandas_api.pandas_api_series import DateSeries
+                        return DateSeries(self, key)
+                    elif col_type == "DateTime":
+                        from pylegend.core.language.pandas_api.pandas_api_series import DateTimeSeries
+                        return DateTimeSeries(self, key)
+                    elif col_type == "StrictDate":
+                        from pylegend.core.language.pandas_api.pandas_api_series import StrictDateSeries
+                        return StrictDateSeries(self, key)
+                    else:
+                        raise ValueError(f"Unsupported column type '{col_type}' for column '{key}'")  # pragma: no cover
+            raise KeyError(f"['{key}'] not in index")
+
+        elif isinstance(key, list):
+            valid_col_names = {col.get_name() for col in self.__columns}
+            invalid_cols = [k for k in key if k not in valid_col_names]
+            if invalid_cols:
+                raise KeyError(f"{invalid_cols} not in index")
+            return self.filter(items=key)
+        else:
+            raise TypeError(f"Invalid key type: {type(key)}. Expected str, list, or boolean expression")
 
     def assign(
             self,
@@ -175,6 +234,44 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
                 errors=errors
             )
         )
+
+    def aggregate(
+        self,
+        func: PyLegendAggInput,
+        axis: PyLegendUnion[int, str] = 0,
+        *args: PyLegendPrimitiveOrPythonPrimitive,
+        **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.aggregate_function import AggregateFunction
+        return PandasApiAppliedFunctionTdsFrame(AggregateFunction(
+            self,
+            func,
+            axis,
+            *args,
+            **kwargs
+        ))
+
+    def agg(
+        self,
+        func: PyLegendAggInput,
+        axis: PyLegendUnion[int, str] = 0,
+        *args: PyLegendPrimitiveOrPythonPrimitive,
+        **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.aggregate_function import AggregateFunction
+        return PandasApiAppliedFunctionTdsFrame(AggregateFunction(
+            self,
+            func,
+            axis,
+            *args,
+            **kwargs
+        ))
 
     def merge(
             self,
