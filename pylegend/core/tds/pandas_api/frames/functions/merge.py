@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from pylegend._typing import (
     PyLegendList,
     PyLegendSequence,
@@ -19,11 +18,14 @@ from pylegend._typing import (
     PyLegendOptional,
     PyLegendTuple,
 )
-from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
-from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
-from pylegend.core.tds.tds_column import TdsColumn
-from pylegend.core.tds.tds_frame import FrameToSqlConfig, FrameToPureConfig
-from pylegend.core.tds.sql_query_helpers import copy_query, create_sub_query, extract_columns_for_subquery
+from pylegend.core.language import (
+    PyLegendBoolean,
+    PyLegendBooleanLiteralExpression,
+    PyLegendPrimitive,
+)
+from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiTdsRow
+from pylegend.core.language.shared.helpers import generate_pure_lambda
+from pylegend.core.language.shared.literal_expressions import convert_literal_to_literal_expression
 from pylegend.core.sql.metamodel import (
     QuerySpecification,
     Select,
@@ -38,14 +40,11 @@ from pylegend.core.sql.metamodel import (
     QualifiedNameReference,
     QualifiedName,
 )
-
-from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiTdsRow
-from pylegend.core.language import (
-    PyLegendBoolean,
-    PyLegendBooleanLiteralExpression,
-    PyLegendPrimitive,
-)
-from pylegend.core.language.shared.helpers import generate_pure_lambda
+from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
+from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
+from pylegend.core.tds.sql_query_helpers import copy_query, create_sub_query, extract_columns_for_subquery
+from pylegend.core.tds.tds_column import TdsColumn
+from pylegend.core.tds.tds_frame import FrameToSqlConfig, FrameToPureConfig
 
 __all__: PyLegendSequence[str] = [
     "PandasApiMergeFunction"
@@ -71,19 +70,19 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         return "merge"  # pragma: no cover
 
     def __init__(
-        self,
-        base_frame: PandasApiBaseTdsFrame,
-        other_frame: PandasApiBaseTdsFrame,
-        how: PyLegendOptional[str],
-        on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
-        left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
-        right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
-        left_index: PyLegendOptional[bool],
-        right_index: PyLegendOptional[bool],
-        sort: PyLegendOptional[bool],
-        suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]],
-        indicator: PyLegendOptional[PyLegendUnion[bool, str]],
-        validate: PyLegendOptional[str]
+            self,
+            base_frame: PandasApiBaseTdsFrame,
+            other_frame: PandasApiBaseTdsFrame,
+            how: PyLegendOptional[str],
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
+            left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
+            right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
+            left_index: PyLegendOptional[bool],
+            right_index: PyLegendOptional[bool],
+            sort: PyLegendOptional[bool],
+            suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]],
+            indicator: PyLegendOptional[PyLegendUnion[bool, str]],
+            validate: PyLegendOptional[str]
     ) -> None:
         if not isinstance(other_frame, PandasApiBaseTdsFrame):
             raise ValueError("Expected PandasApiBaseTdsFrame for 'other'")  # pragma: no cover
@@ -92,13 +91,18 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         self.__on = on
         self.__left_on = left_on
         self.__right_on = right_on
+        self.__left_index = left_index
+        self.__right_index = right_index
+        self.__sort = sort
         self.__how = how
         self.__suffixes = suffixes
+        self.__indicator = indicator
+        self.__validate = validate
 
     # Key resolution helpers
     def __normalize_keys(
-        self,
-        candidate: PyLegendUnion[str, PyLegendList[str], None]
+            self,
+            candidate: PyLegendUnion[str, PyLegendList[str], None]
     ) -> PyLegendList[str]:
         if candidate is None:
             return []
@@ -109,25 +113,25 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         right_cols = [c.get_name() for c in self.__other_frame.columns()]
 
         if self.__on is not None and (self.__left_on is not None or self.__right_on is not None):
-            raise ValueError("Cannot pass 'on' together with 'left_on' or 'right_on'")
+            raise ValueError('Can only pass argument "on" OR "left_on" and "right_on", not a combination of both.')
         if self.__on is not None:
             on_keys = self.__normalize_keys(self.__on)
             for k in on_keys:
                 if k not in left_cols or k not in right_cols:
-                    raise ValueError(f"Merge key '{k}' not present in both frames")
+                    raise KeyError(f"'{k}' not found")
             return [(k, k) for k in on_keys]
 
         left_keys = self.__normalize_keys(self.__left_on)
         right_keys = self.__normalize_keys(self.__right_on)
         if left_keys or right_keys:
             if len(left_keys) != len(right_keys):
-                raise ValueError("left_on and right_on must be same length")
+                raise ValueError("len(right_on) must equal len(left_on)")
             for lk in left_keys:
                 if lk not in left_cols:
-                    raise ValueError(f"Left key '{lk}' not found")
+                    raise ValueError(f"'{k}' not found")
             for rk in right_keys:
                 if rk not in right_cols:
-                    raise ValueError(f"Right key '{rk}' not found")
+                    raise ValueError(f"'{k}' not found")
             return list(zip(left_keys, right_keys))
 
         # Infer intersection by default
@@ -147,17 +151,35 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             expr = part if expr is None else (expr & part)
         return expr
 
+    def __build_rename_chain(
+            self,
+            frame_pure: str,
+            rename_specs: PyLegendSequence[PyLegendTuple[str, str]],
+            config: FrameToPureConfig
+    ) -> str:
+        if not rename_specs:
+            return frame_pure
+        out = frame_pure
+        for orig, new in rename_specs:
+            out = (
+                f"{out}{config.separator(1)}"
+                f"->rename({config.separator(2)}~{orig}, ~{new}{config.separator(1)})"
+            )
+        return out
+
     def __join_type(self) -> JoinType:
         how_lower = self.__how.lower()
         if how_lower == "inner":
             return JoinType.INNER
-        if how_lower in ("left", "left_outer"):
+        if how_lower == "left":
             return JoinType.LEFT
-        if how_lower in ("right", "right_outer"):
+        if how_lower == "right":
             return JoinType.RIGHT
-        if how_lower in ("outer", "full", "full_outer"):
+        if how_lower == "outer":
             return JoinType.FULL
-        raise ValueError("Unsupported merge how - " + self.__how)
+        if how_lower == "cross":
+            return JoinType.CROSS
+        raise ValueError("do not recognize join method " + self.__how)
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
         db_extension = config.sql_to_string_generator().get_db_extension()
@@ -178,20 +200,18 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         left_alias = db_extension.quote_identifier("left")
         right_alias = db_extension.quote_identifier("right")
 
-        # Recalculate columns (adds suffixes)
-        result_columns = self.calculate_columns()
-        # Need mapping from original columns to aliases referencing left/right
         left_original = {c.get_name(): c for c in self.__base_frame.columns()}
         right_original = {c.get_name(): c for c in self.__other_frame.columns()}
         key_pairs = self.__derive_key_pairs()
         same_name_keys = {l for l, r in key_pairs if l == r}
 
         select_items: PyLegendList[SelectItem] = []
-        # Left select items (with potential renamed overlapping)
+
         left_cols_set = set(left_original.keys())
         right_cols_set = set(right_original.keys())
         overlapping = (left_cols_set & right_cols_set) - same_name_keys
 
+        # Left select items
         for c in self.__base_frame.columns():
             orig = c.get_name()
             out_name = orig + self.__suffixes[0] if orig in overlapping else orig
@@ -204,9 +224,9 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         # Right select items
         for c in self.__other_frame.columns():
             orig = c.get_name()
-            # Skip same-name join key
             if orig in same_name_keys:
                 continue
+
             out_name = orig + self.__suffixes[1] if orig in overlapping else orig
             q_out = db_extension.quote_identifier(out_name)
             q_in = db_extension.quote_identifier(orig)
@@ -242,22 +262,124 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         return create_sub_query(join_spec, config, "root")
 
     def to_pure(self, config: FrameToPureConfig) -> str:
-        # Represented as a join with auto lambda
-        join_kind = (
-            "INNER" if self.__how.lower() == "inner" else
-            "LEFT" if self.__how.lower() in ("left", "left_outer") else
-            "RIGHT" if self.__how.lower() in ("right", "right_outer") else
-            "FULL"
-        )
+        how_lower = self.__how.lower()
+        if how_lower == "inner":
+            join_kind = "INNER"
+        elif how_lower == "left":
+            join_kind = "LEFT"
+        elif how_lower == "right":
+            join_kind = "RIGHT"
+        elif how_lower == "outer":
+            join_kind = "FULL"
+        elif how_lower == "cross":
+            raise NotImplementedError("Cross join not implemented yet in PURE")
+        else:
+            raise ValueError("do not recognize join method " + self.__how)
+
+        # Resolve key pairs
+        key_pairs = self.__derive_key_pairs()
+        if not key_pairs:
+            raise ValueError("No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns.")
+
+        left_cols = [c.get_name() for c in self.__base_frame.columns()]
+        right_cols = [c.get_name() for c in self.__other_frame.columns()]
+
+        # Suffix handling for overlapping non-key columns
+        if self.__suffixes is None:
+            left_suf, right_suf = "_x", "_y"
+        else:
+            s = list(self.__suffixes)
+            if len(s) != 2:
+                raise ValueError("Expected exactly two suffixes")
+            left_suf, right_suf = s[0], s[1]
+
+        left_col_set = set(left_cols)
+        right_col_set = set(right_cols)
+        overlapping = left_col_set & right_col_set
+
+        # Overlapping join keys (same name) need temporary rename on right to allow join
+        identical_key_names = {
+            lk for (lk, rk) in key_pairs if lk == rk
+        }
+
+        # Build rename specs
+        left_rename_specs = []
+        right_rename_specs = []
+
+        # Non-key overlapping columns get suffixes
+        for col in overlapping:
+            if col in identical_key_names:
+                continue
+
+            # Non-key overlap: apply suffixes
+            left_rename_specs.append((col, col + left_suf))
+            right_rename_specs.append((col, col + right_suf))
+
+        # Temporary rename for identical key names on right
+        temp_right_key_map = {}
+        for k in identical_key_names:
+            temp_name = k + "__right_key_tmp"
+            right_rename_specs.append((k, temp_name))
+            temp_right_key_map[k] = temp_name
+
+        left_pure = self.__base_frame.to_pure(config)
+        right_pure = self.__other_frame.to_pure(config.push_indent(2))
+
+        left_pure = self.__build_rename_chain(left_pure, left_rename_specs, config)
+        right_pure = self.__build_rename_chain(right_pure, right_rename_specs, config.push_indent(2))
+
+        # Build join condition expression
         left_row = PandasApiTdsRow.from_tds_frame("l", self.__base_frame)
         right_row = PandasApiTdsRow.from_tds_frame("r", self.__other_frame)
-        cond_expr = self.__build_condition()
-        cond_str = cond_expr.to_pure_expression(config.push_indent(2))
-        return (f"{self.__base_frame.to_pure(config)}{config.separator(1)}"
-                f"->merge({config.separator(2)}"
-                f"{self.__other_frame.to_pure(config.push_indent(2))},{config.separator(2, True)}"
-                f"JoinKind.{join_kind},{config.separator(2, True)}"
-                f"{generate_pure_lambda('l, r', cond_str)}{config.separator(1)})")
+
+        expr = None
+        for l_key, r_key in key_pairs:
+            part = (left_row[l_key] == right_row[r_key])
+            expr = part if expr is None else (expr & part)
+
+        if not isinstance(expr, PyLegendPrimitive):
+            expr = convert_literal_to_literal_expression(expr)
+        cond_str = expr.to_pure_expression(config.push_indent(2))
+
+        for orig, tmp in temp_right_key_map.items():
+            cond_str = cond_str.replace(f"$r.{orig}", f"$r.{tmp}")
+
+        join_expr = (
+            f"{left_pure}{config.separator(1)}"
+            f"->join({config.separator(2)}"
+            f"{right_pure},{config.separator(2, True)}"
+            f"JoinKind.{join_kind},{config.separator(2, True)}"
+            f"{generate_pure_lambda('l, r', cond_str)}{config.separator(1)})"
+            f")"
+        )
+        print("JOIN PURE: ", join_expr)
+
+        # Only project if temporary right key renames exist
+        if temp_right_key_map:
+            final_cols = []
+
+            for c in left_cols:
+                if (c in overlapping and c not in identical_key_names):
+                    final_cols.append(c + left_suf)
+                else:
+                    final_cols.append(c)
+
+            for c in right_cols:
+                if c in temp_right_key_map:
+                    continue
+                if (c in overlapping and c not in identical_key_names):
+                    final_cols.append(c + right_suf)
+                else:
+                    final_cols.append(c)
+
+            project_items = [f"{col}:x|$x.{col}" for col in final_cols]
+            project_body = ", ".join(project_items)
+            join_expr = (
+                f"{join_expr}{config.separator(1)}"
+                f"->project({config.separator(2)}~[{project_body}]{config.separator(1)})"
+            )
+
+        return join_expr
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
         return self.__base_frame
@@ -265,7 +387,6 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
     def tds_frame_parameters(self) -> PyLegendList["PandasApiBaseTdsFrame"]:
         return [self.__other_frame]
 
-    # Columns after merge
     def calculate_columns(self) -> PyLegendSequence["TdsColumn"]:
         key_pairs = self.__derive_key_pairs()
         left_keys_same_name = {l for l, r in key_pairs if l == r}
@@ -279,17 +400,18 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         for c in self.__base_frame.columns():
             name = c.get_name()
             if name in overlapping:
-                result_cols.append(TdsColumn(name + self.__suffixes[0], c.get_type()))
+                result_cols.append(c.copy_with_changed_name(name + self.__suffixes[0]))
             else:
                 result_cols.append(c.copy())
 
-        # Add right columns (skip same-name keys; apply suffix to overlapping non-key)
+        # Build right columns (skip same-name keys; apply suffix to overlapping non-key)
         for c in self.__other_frame.columns():
             name = c.get_name()
             if any(name == l and l == r for l, r in key_pairs):
-                continue  # key appears already
+                continue
+
             if name in overlapping:
-                result_cols.append(TdsColumn(name + self.__suffixes[1], c.get_type()))
+                result_cols.append(c.copy_with_changed_name(name + self.__suffixes[1]))
             else:
                 result_cols.append(c.copy())
 
@@ -300,10 +422,55 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         return result_cols
 
     def validate(self) -> bool:
+        # Frame type validation
+        if not isinstance(self.__other_frame, PandasApiBaseTdsFrame):
+            raise TypeError(f"Can only merge DataFrame objects, a {type(self.__other_frame)} was passed")
+
+        # how
+        if not isinstance(self.__how, str):
+            raise TypeError(f"'how' must be str, got {type(self.__how)}")
+
+        # key parameters: on / left_on / right_on
+        def _validate_keys_param(param_name: str, value: PyLegendUnion[str, PyLegendSequence[str], None]) -> None:
+            if value is None:
+                return
+            if isinstance(value, str):
+                return
+            if isinstance(value, (list, tuple)):
+                if not all(isinstance(v, str) for v in value):
+                    raise TypeError(f"'{param_name}' must contain only str elements")
+                return
+            raise TypeError(
+                f"Passing '{param_name}' as a {type(value)} is not supported. "
+                f"Provide '{param_name}' as a tuple instead."
+            )
+
+        _validate_keys_param("on", self.__on)
+        _validate_keys_param("left_on", self.__left_on)
+        _validate_keys_param("right_on", self.__right_on)
+
         # Suffix validation
-        if not (isinstance(self.__suffixes, tuple) and len(self.__suffixes) == 2):
-            raise ValueError("suffixes must be a tuple of length 2")
+        if not isinstance(self.__suffixes, (tuple, list)):
+            raise TypeError(
+                f"Passing 'suffixes' as {type(self.__suffixes)}, is not supported. "
+                "Provide 'suffixes' as a tuple instead."
+            )
+        if len(self.__suffixes) != 2:
+            raise ValueError("too many values to unpack (expected 2)")
+
+        # Unsupported parameters
+        if self.__left_index or self.__right_index:
+            raise NotImplementedError("Merging on index is not supported yet in PandasApi merge function")
+
+        if self.__sort:
+            raise NotImplementedError("Sort parameter is not supported yet in PandasApi merge function")
+
+        if self.__indicator:
+            raise NotImplementedError("Indicator parameter is not supported yet in PandasApi merge function")
+
+        if self.__validate:
+            raise NotImplementedError("Validate parameter is not supported yet in PandasApi merge function")
+
         self.__derive_key_pairs()  # runs key validations
-        self.__join_type()         # validates how
-        # Column duplication (handled later) but we can still check ambiguous scenario:
+
         return True
