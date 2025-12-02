@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from pylegend._typing import (
     PyLegendList,
     PyLegendSequence,
@@ -42,6 +43,7 @@ from pylegend.core.sql.metamodel import (
 )
 from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
 from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
+from pylegend.core.tds.pandas_api.frames.pandas_api_tds_frame import PandasApiTdsFrame
 from pylegend.core.tds.sql_query_helpers import copy_query, create_sub_query, extract_columns_for_subquery
 from pylegend.core.tds.tds_column import TdsColumn
 from pylegend.core.tds.tds_frame import FrameToSqlConfig, FrameToPureConfig
@@ -84,8 +86,6 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             indicator: PyLegendOptional[PyLegendUnion[bool, str]],
             validate: PyLegendOptional[str]
     ) -> None:
-        if not isinstance(other_frame, PandasApiBaseTdsFrame):
-            raise ValueError("Expected PandasApiBaseTdsFrame for 'other'")  # pragma: no cover
         self.__base_frame = base_frame
         self.__other_frame = other_frame
         self.__on = on
@@ -123,19 +123,22 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
 
         left_keys = self.__normalize_keys(self.__left_on)
         right_keys = self.__normalize_keys(self.__right_on)
+
         if left_keys or right_keys:
             if len(left_keys) != len(right_keys):
+                print("came here")
                 raise ValueError("len(right_on) must equal len(left_on)")
             for lk in left_keys:
                 if lk not in left_cols:
-                    raise ValueError(f"'{k}' not found")
+                    raise KeyError(f"'{lk}' not found")
             for rk in right_keys:
                 if rk not in right_cols:
-                    raise ValueError(f"'{k}' not found")
+                    raise KeyError(f"'{rk}' not found")
+
             return list(zip(left_keys, right_keys))
 
         # Infer intersection by default
-        inferred = list(set(left_cols) & set(right_cols))
+        inferred = [c for c in left_cols if c in right_cols]
         return [(k, k) for k in inferred]
 
     # Internal auto join condition builder (returns PyLegendBoolean expression)
@@ -143,8 +146,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         key_pairs = self.__derive_key_pairs()
         left_row = PandasApiTdsRow.from_tds_frame("left", self.__base_frame)
         right_row = PandasApiTdsRow.from_tds_frame("right", self.__other_frame)
-        if not key_pairs:
-            raise ValueError("No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns.")
+
         expr = None
         for l, r in key_pairs:
             part = (left_row[l] == right_row[r])
@@ -159,12 +161,21 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
     ) -> str:
         if not rename_specs:
             return frame_pure
+
+        multiline = bool(getattr(config, "_FrameToPureConfig__pretty", False))
+        # print("pretty = ", multiline)
+
         out = frame_pure
         for orig, new in rename_specs:
-            out = (
-                f"{out}{config.separator(1)}"
-                f"->rename({config.separator(2)}~{orig}, ~{new}{config.separator(1)})"
-            )
+            if multiline:
+                out = (
+                    f"{out}{config.separator(1)}"
+                    f"->rename({config.separator(2)}~{orig}, ~{new}{config.separator(1)})"
+                )
+            else:
+                out = out.rstrip("\r\n ")
+                out = f"{out}->rename(~{orig}, ~{new})"
+
         return out
 
     def __join_type(self) -> JoinType:
@@ -178,7 +189,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         if how_lower == "outer":
             return JoinType.FULL
         if how_lower == "cross":
-            return JoinType.CROSS
+            raise NotImplementedError("Cross join not implemented yet in PURE")
         raise ValueError("do not recognize join method " + self.__how)
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
@@ -271,15 +282,9 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             join_kind = "RIGHT"
         elif how_lower == "outer":
             join_kind = "FULL"
-        elif how_lower == "cross":
-            raise NotImplementedError("Cross join not implemented yet in PURE")
-        else:
-            raise ValueError("do not recognize join method " + self.__how)
 
         # Resolve key pairs
         key_pairs = self.__derive_key_pairs()
-        if not key_pairs:
-            raise ValueError("No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns.")
 
         left_cols = [c.get_name() for c in self.__base_frame.columns()]
         right_cols = [c.get_name() for c in self.__other_frame.columns()]
@@ -306,14 +311,18 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         left_rename_specs = []
         right_rename_specs = []
 
+        left_rename_map = {}
+        right_rename_map = {}
+
         # Non-key overlapping columns get suffixes
         for col in overlapping:
             if col in identical_key_names:
                 continue
 
-            # Non-key overlap: apply suffixes
             left_rename_specs.append((col, col + left_suf))
+            left_rename_map[col] = col + left_suf
             right_rename_specs.append((col, col + right_suf))
+            right_rename_map[col] = col + right_suf
 
         # Temporary rename for identical key names on right
         temp_right_key_map = {}
@@ -341,8 +350,15 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             expr = convert_literal_to_literal_expression(expr)
         cond_str = expr.to_pure_expression(config.push_indent(2))
 
+        # Replace changed column names
         for orig, tmp in temp_right_key_map.items():
             cond_str = cond_str.replace(f"$r.{orig}", f"$r.{tmp}")
+
+        for orig, new in left_rename_map.items():
+            cond_str = cond_str.replace(f"$l.{orig}", f"$l.{new}")
+
+        for orig, new in right_rename_map.items():
+            cond_str = cond_str.replace(f"$r.{orig}", f"$r.{new}")
 
         join_expr = (
             f"{left_pure}{config.separator(1)}"
@@ -350,9 +366,8 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             f"{right_pure},{config.separator(2, True)}"
             f"JoinKind.{join_kind},{config.separator(2, True)}"
             f"{generate_pure_lambda('l, r', cond_str)}{config.separator(1)})"
-            f")"
         )
-        print("JOIN PURE: ", join_expr)
+        # print("JOIN PURE: ", join_expr)
 
         # Only project if temporary right key renames exist
         if temp_right_key_map:
@@ -423,8 +438,12 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
 
     def validate(self) -> bool:
         # Frame type validation
-        if not isinstance(self.__other_frame, PandasApiBaseTdsFrame):
-            raise TypeError(f"Can only merge DataFrame objects, a {type(self.__other_frame)} was passed")
+        if not isinstance(self.__other_frame, PandasApiTdsFrame):
+            raise TypeError(f"Can only merge TdsFrame objects, a {type(self.__other_frame)} was passed")
+
+        # Same frame not supported
+        if self.__base_frame is self.__other_frame:
+            raise NotImplementedError("Merging the same TdsFrame is not supported yet")
 
         # how
         if not isinstance(self.__how, str):
@@ -471,6 +490,10 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         if self.__validate:
             raise NotImplementedError("Validate parameter is not supported yet in PandasApi merge function")
 
-        self.__derive_key_pairs()  # runs key validations
+        key_pairs = self.__derive_key_pairs()  # runs key validations
+        if not key_pairs:
+            raise ValueError("No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns.")
+
+        self.__join_type()  # runs how validation
 
         return True

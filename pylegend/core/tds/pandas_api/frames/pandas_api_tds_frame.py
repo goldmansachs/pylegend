@@ -23,7 +23,8 @@ from pylegend._typing import (
     PyLegendOptional,
     PyLegendList,
     PyLegendSet,
-    PyLegendTuple
+    PyLegendTuple,
+    PyLegendDict
 )
 from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
 from pylegend.core.language import (
@@ -130,6 +131,7 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
 
+    @abstractmethod
     def merge(
             self,
             other: "PandasApiTdsFrame",
@@ -143,5 +145,19 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]] = ("_x", "_y"),
             indicator: PyLegendOptional[PyLegendUnion[bool, str]] = False,
             validate: PyLegendOptional[str] = None
+    ) -> "PandasApiTdsFrame":
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def rename(
+            self,
+            mapper: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
+            index: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
+            columns: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
+            axis: PyLegendUnion[str, int, PyLegendInteger] = 1,
+            inplace: PyLegendUnion[bool, PyLegendBoolean] = False,
+            copy: PyLegendUnion[bool, PyLegendBoolean] = True,
+            level: PyLegendOptional[PyLegendUnion[int, PyLegendInteger, str]] = None,
+            errors: str = "ignore",
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover

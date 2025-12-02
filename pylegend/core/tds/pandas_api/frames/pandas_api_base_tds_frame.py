@@ -27,6 +27,7 @@ from pylegend._typing import (
     PyLegendOptional,
     PyLegendCallable,
     PyLegendUnion,
+    PyLegendDict
 )
 from pylegend.core.database.sql_to_string import (
     SqlToStringConfig,
@@ -300,8 +301,6 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         from pylegend.core.tds.pandas_api.frames.functions.merge import (
             PandasApiMergeFunction
         )
-        if not isinstance(other, PandasApiTdsFrame):
-            raise ValueError("Expected PandasApiTdsFrame for 'other'")  # pragma: no cover
         return PandasApiAppliedFunctionTdsFrame(
             PandasApiMergeFunction(
                 self,
@@ -316,6 +315,43 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
                 suffixes=suffixes,
                 indicator=indicator,
                 validate=validate
+            )
+        )
+
+    def rename(
+            self,
+            mapper: PyLegendOptional[PyLegendUnion[PyLegendCallable[[str], str], PyLegendSequence[str]]] = None,
+            index: PyLegendOptional[PyLegendUnion[PyLegendCallable[[str], str], PyLegendSequence[str]]] = None,
+            columns: PyLegendOptional[PyLegendUnion[PyLegendCallable[[str], str], PyLegendSequence[str]]] = None,
+            axis: PyLegendUnion[str, int, PyLegendInteger] = 1,
+            inplace: PyLegendUnion[bool, PyLegendBoolean] = False,
+            copy: PyLegendUnion[bool, PyLegendBoolean] = True,
+            level: PyLegendOptional[PyLegendUnion[int, PyLegendInteger, str]] = None,
+            errors: str = "ignore",
+    ) -> "PandasApiTdsFrame":
+        """
+        Pandas-like rename:
+        - Supports mapping via `mapper` or explicit `index`/`columns`
+        - Only column renames are applied when `axis` is 1
+        - `errors`: ignore | raise
+        """
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.rename import (
+            PandasApiRenameFunction
+        )
+        return PandasApiAppliedFunctionTdsFrame(
+            PandasApiRenameFunction(
+                base_frame=self,
+                mapper=mapper,
+                axis=axis,
+                index=index,
+                columns=columns,
+                copy=copy,
+                inplace=inplace,
+                level=level,
+                errors=errors
             )
         )
 
