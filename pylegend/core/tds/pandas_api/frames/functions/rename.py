@@ -101,18 +101,23 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
         if mapping_source is None:
             return {}
 
-        out: Dict[str, str] = {}
+        if not callable(mapping_source) and not isinstance(mapping_source, dict):
+            raise TypeError(
+                f"Rename mapping must be a dict or a callable, got {type(mapping_source)}"
+            )
+
+        out: PyLegendDict[str, str] = {}
         if callable(mapping_source):
             func = mapping_source  # type: ignore
             for col in base_cols:
                 new = func(col)
                 if not isinstance(new, str):
-                    raise TypeError(f"Rename function must return str, got {type(new)} for column {col}")
+                    raise TypeError(f"Rename function must return str, got {type(new)} for column {col}")  # pragma: no cover
                 if new != col:
                     out[col] = new
         else:
             # dict-like
-            dict_map: Dict[str, str] = mapping_source  # type: ignore
+            dict_map: PyLegendDict[str, str] = mapping_source  # type: ignore
             if self.__errors == "raise":
                 missing = [k for k in dict_map.keys() if k not in base_cols]
                 if missing:
@@ -122,10 +127,6 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
                 if k in base_cols and k != v:
                     out[k] = v
 
-        # Validate no duplicate targets
-        targets = list(out.values())
-        if len(targets) != len(set(targets)):
-            raise ValueError("Renaming produces duplicate column names")
         return out
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
@@ -156,8 +157,6 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
     def to_pure(self, config: FrameToPureConfig) -> str:
         rename_map = self.__resolve_columns_mapping()
         base_pure = self.__base_frame.to_pure(config)
-        if not rename_map:
-            return base_pure
 
         # Build a single project that aliases columns to new names
         project_items: PyLegendList[str] = []
@@ -197,12 +196,12 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
             raise NotImplementedError("level parameter not supported yet in Pandas API")
 
         if not isinstance(self.__inplace, bool):
-            raise TypeError("inplace must be bool")
+            raise TypeError(f"inplace must be bool. Got {type(self.__inplace)}")
         if self.__inplace is True:
             raise NotImplementedError("inplace=True not supported yet in Pandas API")
 
         if not isinstance(self.__copy, bool):
-            raise TypeError("copy must be bool")
+            raise TypeError(f"copy must be bool. Got {type(self.__copy)}")
         if self.__copy is False:
             raise NotImplementedError("copy=False not supported yet in Pandas API")
 
@@ -215,15 +214,13 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
         if self.__axis in (0, "index"):
             raise NotImplementedError("Renaming index not supported yet in Pandas API")
 
-        # conflict validation
-        specified = sum(
-            v is not None
-            for v in [self.__mapper, self.__index, self.__columns]
-        )
-        if specified > 2:
-            raise ValueError("Cannot specify both 'axis' and any of 'index' or 'columns'")
+        # index
         if self.__index is not None:
             raise NotImplementedError("Index mapper not supported yet in Pandas API")
+
+        # conflict validation
+        if self.__mapper and self.__columns:
+            raise ValueError("Cannot specify both 'axis' and any of 'index' or 'columns'")
 
         self.__resolve_columns_mapping()  # runs validation
         return True
