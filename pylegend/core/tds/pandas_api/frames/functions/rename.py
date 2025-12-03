@@ -17,7 +17,6 @@ from pylegend._typing import (
     PyLegendSequence,
     PyLegendUnion,
     PyLegendOptional,
-    PyLegendSet,
     PyLegendCallable,
     PyLegendDict
 )
@@ -27,20 +26,14 @@ from pylegend.core.language import (
 )
 from pylegend.core.sql.metamodel import (
     QuerySpecification,
-    Select,
     SelectItem,
-    SingleColumn,
-    QualifiedNameReference,
-    QualifiedName,
-    AliasedRelation,
-    TableSubquery,
-    Query
+    SingleColumn
 )
 from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
 from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
+from pylegend.core.tds.sql_query_helpers import copy_query
 from pylegend.core.tds.tds_column import TdsColumn
 from pylegend.core.tds.tds_frame import FrameToPureConfig, FrameToSqlConfig
-from pylegend.core.tds.sql_query_helpers import copy_query, create_sub_query, extract_columns_for_subquery
 
 
 class PandasApiRenameFunction(PandasApiAppliedFunction):
@@ -59,16 +52,16 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
         return "rename"  # pragma: no cover
 
     def __init__(
-        self,
-        base_frame: PandasApiBaseTdsFrame,
-        mapper: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]],
-        axis: PyLegendUnion[str, int, PyLegendInteger],
-        index: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]],
-        columns: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]],
-        level: PyLegendOptional[PyLegendUnion[int, PyLegendInteger, str]],
-        inplace: bool,
-        errors: str,
-        copy: bool
+            self,
+            base_frame: PandasApiBaseTdsFrame,
+            mapper: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]],
+            axis: PyLegendUnion[str, int, PyLegendInteger],
+            index: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]],
+            columns: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]],
+            level: PyLegendOptional[PyLegendUnion[int, PyLegendInteger, str]],
+            inplace: PyLegendUnion[bool, PyLegendBoolean],
+            errors: str,
+            copy: PyLegendUnion[bool, PyLegendBoolean]
     ) -> None:
         self.__base_frame = base_frame
         self.__mapper = mapper
@@ -108,16 +101,17 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
 
         out: PyLegendDict[str, str] = {}
         if callable(mapping_source):
-            func = mapping_source  # type: ignore
+            func = mapping_source
             for col in base_cols:
                 new = func(col)
                 if not isinstance(new, str):
-                    raise TypeError(f"Rename function must return str, got {type(new)} for column {col}")  # pragma: no cover
+                    raise TypeError(
+                        f"Rename function must return str, got {type(new)} for column {col}")  # pragma: no cover
                 if new != col:
                     out[col] = new
         else:
             # dict-like
-            dict_map: PyLegendDict[str, str] = mapping_source  # type: ignore
+            dict_map: PyLegendDict[str, str] = mapping_source
             if self.__errors == "raise":
                 missing = [k for k in dict_map.keys() if k not in base_cols]
                 if missing:
@@ -179,7 +173,7 @@ class PandasApiRenameFunction(PandasApiAppliedFunction):
 
     def calculate_columns(self) -> PyLegendSequence["TdsColumn"]:
         rename_map = self.__resolve_columns_mapping()
-        new_cols: PyLegendSequence[TdsColumn] = []
+        new_cols = []
         for c in self.__base_frame.columns():
             name = c.get_name()
             if name in rename_map:

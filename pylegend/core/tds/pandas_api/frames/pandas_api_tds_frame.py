@@ -26,10 +26,10 @@ from pylegend._typing import (
     PyLegendTuple,
     PyLegendDict
 )
-from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
 from pylegend.core.language import (
     PyLegendPrimitive,
 )
+from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
 from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiTdsRow
 from pylegend.core.language.shared.primitives.boolean import PyLegendBoolean
 from pylegend.core.language.shared.primitives.integer import PyLegendInteger
@@ -113,21 +113,21 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
 
     @abstractmethod
     def aggregate(
-        self,
-        func: PyLegendAggInput,
-        axis: PyLegendUnion[int, str] = 0,
-        *args: PyLegendPrimitiveOrPythonPrimitive,
-        **kwargs: PyLegendPrimitiveOrPythonPrimitive
+            self,
+            func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
+            *args: PyLegendPrimitiveOrPythonPrimitive,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
 
     @abstractmethod
     def agg(
-        self,
-        func: PyLegendAggInput,
-        axis: PyLegendUnion[int, str] = 0,
-        *args: PyLegendPrimitiveOrPythonPrimitive,
-        **kwargs: PyLegendPrimitiveOrPythonPrimitive
+            self,
+            func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
+            *args: PyLegendPrimitiveOrPythonPrimitive,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
 

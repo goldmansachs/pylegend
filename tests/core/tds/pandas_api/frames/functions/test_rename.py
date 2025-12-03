@@ -14,7 +14,6 @@
 
 import json
 from textwrap import dedent
-import datetime
 
 import pytest
 
@@ -29,10 +28,6 @@ from pylegend.extensions.tds.pandas_api.frames.pandas_api_table_spec_input_frame
 from tests.test_helpers import generate_pure_query_and_compile
 from tests.test_helpers.test_legend_service_frames import simple_person_service_frame_pandas_api
 from pylegend.core.request.legend_client import LegendClient
-from pylegend.core.database.sql_to_string import (
-    SqlToStringConfig,
-    SqlToStringFormat
-)
 
 
 class TestRenameFunction:
@@ -50,16 +45,16 @@ class TestRenameFunction:
 
         # axis
         with pytest.raises(ValueError) as v:
-            frame.rename({'col1': '123'}, axis=2)  # type: ignore
+            frame.rename({'col1': '123'}, axis=2)
         assert v.value.args[0] == "Unsupported axis 2"
 
         with pytest.raises(ValueError) as v:
-            frame.rename({'col1': '123'}, axis='b')  # type: ignore
+            frame.rename({'col1': '123'}, axis='b')
         assert v.value.args[0] == "Unsupported axis b"
 
         # errors
         with pytest.raises(ValueError) as v:
-            frame.rename({'col1': '123'}, errors='raisee')  # type: ignore
+            frame.rename({'col1': '123'}, errors='raisee')
         assert v.value.args[0] == "errors must be 'ignore' or 'raise'. Got raisee"
 
         with pytest.raises(ValueError) as v:
@@ -67,24 +62,24 @@ class TestRenameFunction:
         assert v.value.args[0] == "errors must be 'ignore' or 'raise'. Got 2"
 
         # mapper
-        with pytest.raises(TypeError) as v:
+        with pytest.raises(TypeError) as t:
             frame.rename(['col1', 'col2'])  # type: ignore
-        assert v.value.args[0] == "Rename mapping must be a dict or a callable, got <class 'list'>"
+        assert t.value.args[0] == "Rename mapping must be a dict or a callable, got <class 'list'>"
 
         # columns
-        with pytest.raises(TypeError) as v:
+        with pytest.raises(TypeError) as v1:
             frame.rename(columns=['col1', 'col2'])  # type: ignore
-        assert v.value.args[0] == "Rename mapping must be a dict or a callable, got <class 'list'>"
+        assert v1.value.args[0] == "Rename mapping must be a dict or a callable, got <class 'list'>"
 
         # copy
-        with pytest.raises(TypeError) as v:
+        with pytest.raises(TypeError) as v1:
             frame.rename({'col1': '123'}, copy='yes')  # type: ignore
-        assert v.value.args[0] == "copy must be bool. Got <class 'str'>"
+        assert v1.value.args[0] == "copy must be bool. Got <class 'str'>"
 
         # inplace
-        with pytest.raises(TypeError) as v:
+        with pytest.raises(TypeError) as v1:
             frame.rename({'col1': '123'}, inplace='yes')  # type: ignore
-        assert v.value.args[0] == "inplace must be bool. Got <class 'str'>"
+        assert v1.value.args[0] == "inplace must be bool. Got <class 'str'>"
 
     def test_rename_notimplemented_error(self) -> None:
         columns = [
@@ -131,9 +126,9 @@ class TestRenameFunction:
         assert v.value.args[0] == "Cannot specify both 'axis' and any of 'index' or 'columns'"
 
         # missing column
-        with pytest.raises(KeyError) as v:
-            frame.rename({'col3': '123', 'col4':'345', 'col1':'111'}, errors='raise')
-        assert v.value.args[0] == "['col3', 'col4'] not found in axis"
+        with pytest.raises(KeyError) as k:
+            frame.rename({'col3': '123', 'col4': '345', 'col1': '111'}, errors='raise')
+        assert k.value.args[0] == "['col3', 'col4'] not found in axis"
 
         # duplicate column
         with pytest.raises(ValueError) as v:
@@ -163,9 +158,9 @@ class TestRenameFunction:
           ->project(
             ~[col1:x|$x.col1, renamed_col2:x|$x.col2, col3:x|$x.col3]
           )'''
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)
-        expected_pure_compact = "#Table(test_schema.test_table)#->project(~[col1:x|$x.col1, renamed_col2:x|$x.col2, col3:x|$x.col3])"
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)  # noqa: E501
+        expected_pure_compact = "#Table(test_schema.test_table)#->project(~[col1:x|$x.col1, renamed_col2:x|$x.col2, col3:x|$x.col3])"  # noqa: E501
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
         # columns
         renamed_frame = frame.rename(columns={'col3': 'renamed_col3', 'col1': 'renamed_col1'})
@@ -182,9 +177,9 @@ class TestRenameFunction:
           ->project(
             ~[renamed_col1:x|$x.col1, col2:x|$x.col2, renamed_col3:x|$x.col3]
           )'''
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)
-        expected_pure_compact = "#Table(test_schema.test_table)#->project(~[renamed_col1:x|$x.col1, col2:x|$x.col2, renamed_col3:x|$x.col3])"
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)  # noqa: E501
+        expected_pure_compact = "#Table(test_schema.test_table)#->project(~[renamed_col1:x|$x.col1, col2:x|$x.col2, renamed_col3:x|$x.col3])"  # noqa: E501
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
         # empty mapper
         renamed_frame = frame.rename({})
@@ -201,9 +196,9 @@ class TestRenameFunction:
           ->project(
             ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3]
           )'''
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)
-        expected_pure_compact = "#Table(test_schema.test_table)#->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3])"
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)  # noqa: E501
+        expected_pure_compact = "#Table(test_schema.test_table)#->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3])"  # noqa: E501
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
     def test_rename_chained(self) -> None:
         columns = [
@@ -231,13 +226,13 @@ class TestRenameFunction:
           ->project(
             ~[col1:x|$x.col1, renamed_col2:x|$x.renamed_col2, renamed_col3:x|$x.col3]
           )'''
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)  # noqa: E501
         expected_pure_compact = (
             "#Table(test_schema.test_table)#"
             "->project(~[col1:x|$x.col1, renamed_col2:x|$x.col2, col3:x|$x.col3])"
             "->project(~[col1:x|$x.col1, renamed_col2:x|$x.renamed_col2, renamed_col3:x|$x.col3])"
         )
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
         # truncate
         newframe = frame.truncate(before=2, after=5)
@@ -258,9 +253,9 @@ class TestRenameFunction:
           ->project(
             ~[col1:x|$x.col1, col2:x|$x.col2, renamed_col3:x|$x.col3]
           )'''
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)
-        expected_pure_compact = "#Table(test_schema.test_table)#->slice(2, 6)->project(~[col1:x|$x.col1, col2:x|$x.col2, renamed_col3:x|$x.col3])"
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)  # noqa: E501
+        expected_pure_compact = "#Table(test_schema.test_table)#->slice(2, 6)->project(~[col1:x|$x.col1, col2:x|$x.col2, renamed_col3:x|$x.col3])"  # noqa: E501
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
         # filter
         renamed_frame = frame.rename({'col1': 'renamed_col1'}).filter(items=['renamed_col1', 'col2'])
@@ -277,13 +272,13 @@ class TestRenameFunction:
             ~[renamed_col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3]
           )
           ->select(~[renamed_col1, col2])'''
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(), self.legend_client) == dedent(expected_pure_pretty)  # noqa: E501
         expected_pure_compact = (
             "#Table(test_schema.test_table)#"
             "->project(~[renamed_col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3])"
             "->select(~[renamed_col1, col2])"
         )
-        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(renamed_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
     def test_e2e_rename(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
         frame: PandasApiTdsFrame = simple_person_service_frame_pandas_api(legend_test_server["engine_port"])

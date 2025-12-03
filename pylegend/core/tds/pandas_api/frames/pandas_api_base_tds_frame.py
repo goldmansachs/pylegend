@@ -96,7 +96,8 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
                 if col.get_name() == key:
                     col_type = col.get_type()
                     if col_type == "Boolean":
-                        from pylegend.core.language.pandas_api.pandas_api_series import BooleanSeries  # pragma: no cover
+                        from pylegend.core.language.pandas_api.pandas_api_series import \
+                            BooleanSeries  # pragma: no cover
                         return BooleanSeries(self, key)  # pragma: no cover (Boolean column not supported in PURE)
                     elif col_type == "String":
                         from pylegend.core.language.pandas_api.pandas_api_series import StringSeries
@@ -237,11 +238,11 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         )
 
     def aggregate(
-        self,
-        func: PyLegendAggInput,
-        axis: PyLegendUnion[int, str] = 0,
-        *args: PyLegendPrimitiveOrPythonPrimitive,
-        **kwargs: PyLegendPrimitiveOrPythonPrimitive
+            self,
+            func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
+            *args: PyLegendPrimitiveOrPythonPrimitive,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
     ) -> "PandasApiTdsFrame":
         from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
             PandasApiAppliedFunctionTdsFrame
@@ -256,11 +257,11 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         ))
 
     def agg(
-        self,
-        func: PyLegendAggInput,
-        axis: PyLegendUnion[int, str] = 0,
-        *args: PyLegendPrimitiveOrPythonPrimitive,
-        **kwargs: PyLegendPrimitiveOrPythonPrimitive
+            self,
+            func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
+            *args: PyLegendPrimitiveOrPythonPrimitive,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
     ) -> "PandasApiTdsFrame":
         from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
             PandasApiAppliedFunctionTdsFrame
@@ -304,7 +305,7 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         return PandasApiAppliedFunctionTdsFrame(
             PandasApiMergeFunction(
                 self,
-                other,
+                other,  # type: ignore
                 how=how,
                 on=on,
                 left_on=left_on,
@@ -320,9 +321,9 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
 
     def rename(
             self,
-            mapper: PyLegendOptional[PyLegendUnion[PyLegendCallable[[str], str], PyLegendSequence[str]]] = None,
-            index: PyLegendOptional[PyLegendUnion[PyLegendCallable[[str], str], PyLegendSequence[str]]] = None,
-            columns: PyLegendOptional[PyLegendUnion[PyLegendCallable[[str], str], PyLegendSequence[str]]] = None,
+            mapper: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
+            index: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
+            columns: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
             axis: PyLegendUnion[str, int, PyLegendInteger] = 1,
             inplace: PyLegendUnion[bool, PyLegendBoolean] = False,
             copy: PyLegendUnion[bool, PyLegendBoolean] = True,
@@ -335,6 +336,7 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         - Only column renames are applied when `axis` is 1
         - `errors`: ignore | raise
         """
+
         from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
             PandasApiAppliedFunctionTdsFrame
         )

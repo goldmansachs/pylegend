@@ -102,7 +102,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
     # Key resolution helpers
     def __normalize_keys(
             self,
-            candidate: PyLegendUnion[str, PyLegendList[str], None]
+            candidate: PyLegendUnion[str, PyLegendSequence[str], None]
     ) -> PyLegendList[str]:
         if candidate is None:
             return []
@@ -142,19 +142,19 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         return [(k, k) for k in inferred]
 
     # Internal auto join condition builder (returns PyLegendBoolean expression)
-    def __build_condition(self) -> PyLegendPrimitive:
+    def __build_condition(self) -> PyLegendBoolean:
         key_pairs = self.__derive_key_pairs()
         left_row = PandasApiTdsRow.from_tds_frame("left", self.__base_frame)
         right_row = PandasApiTdsRow.from_tds_frame("right", self.__other_frame)
 
         expr = None
-        for l, r in key_pairs:
-            part = (left_row[l] == right_row[r])
+        for left_key, right_key in key_pairs:
+            part = (left_row[left_key] == right_row[right_key])
             expr = part if expr is None else (expr & part)
-        return expr
+        return expr  # type: ignore
 
     def __join_type(self) -> JoinType:
-        how_lower = self.__how.lower()
+        how_lower = self.__how.lower()  # type: ignore
         if how_lower == "inner":
             return JoinType.INNER
         if how_lower == "left":
@@ -165,7 +165,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             return JoinType.FULL
         if how_lower == "cross":
             raise NotImplementedError("Cross join not implemented yet in PURE")
-        raise ValueError("do not recognize join method " + self.__how)
+        raise ValueError("do not recognize join method " + self.__how)  # type: ignore
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
         db_extension = config.sql_to_string_generator().get_db_extension()
@@ -189,7 +189,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         left_original = {c.get_name(): c for c in self.__base_frame.columns()}
         right_original = {c.get_name(): c for c in self.__other_frame.columns()}
         key_pairs = self.__derive_key_pairs()
-        same_name_keys = {l for l, r in key_pairs if l == r}
+        same_name_keys = {left_key for left_key, right_key in key_pairs if left_key == right_key}
 
         select_items: PyLegendList[SelectItem] = []
 
@@ -200,7 +200,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         # Left select items
         for c in self.__base_frame.columns():
             orig = c.get_name()
-            out_name = orig + self.__suffixes[0] if orig in overlapping else orig
+            out_name = orig + self.__suffixes[0] if orig in overlapping else orig  # type: ignore
             q_out = db_extension.quote_identifier(out_name)
             q_in = db_extension.quote_identifier(orig)
             select_items.append(
@@ -213,7 +213,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             if orig in same_name_keys:
                 continue
 
-            out_name = orig + self.__suffixes[1] if orig in overlapping else orig
+            out_name = orig + self.__suffixes[1] if orig in overlapping else orig  # type: ignore
             q_out = db_extension.quote_identifier(out_name)
             q_in = db_extension.quote_identifier(orig)
             select_items.append(
@@ -248,7 +248,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         return create_sub_query(join_spec, config, "root")
 
     def to_pure(self, config: FrameToPureConfig) -> str:
-        how_lower = self.__how.lower()
+        how_lower = self.__how.lower()  # type: ignore
         if how_lower == "inner":
             join_kind = "INNER"
         elif how_lower == "left":
@@ -314,16 +314,16 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         expr = None
         for l_key, r_key in key_pairs:
             l_eff = left_rename_map.get(l_key, l_key)
-            r_eff = right_map.get(r_key, r_key)
+            r_eff = right_map.get(r_key, r_key)  # type: ignore
             part = (left_row[l_eff] == right_row[r_eff])
             expr = part if expr is None else (expr & part)
 
         if not isinstance(expr, PyLegendPrimitive):
-            expr = convert_literal_to_literal_expression(expr)
-        cond_str = expr.to_pure_expression(config.push_indent(2))
+            expr = convert_literal_to_literal_expression(expr)  # type: ignore
+        cond_str = expr.to_pure_expression(config.push_indent(2))  # type: ignore
 
-        left_pure = left_frame.to_pure(config)
-        right_pure = right_frame.to_pure(config.push_indent(2))
+        left_pure = left_frame.to_pure(config)  # type: ignore
+        right_pure = right_frame.to_pure(config.push_indent(2))  # type: ignore
 
         join_expr = (
             f"{left_pure}{config.separator(1)}"
@@ -368,7 +368,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
 
     def calculate_columns(self) -> PyLegendSequence["TdsColumn"]:
         key_pairs = self.__derive_key_pairs()
-        left_keys_same_name = {l for l, r in key_pairs if l == r}
+        left_keys_same_name = {left_key for left_key, right_key in key_pairs if left_key == right_key}
         left_cols = [c.get_name() for c in self.__base_frame.columns()]
         right_cols = [c.get_name() for c in self.__other_frame.columns()]
 
@@ -379,20 +379,20 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         for c in self.__base_frame.columns():
             name = c.get_name()
             if name in overlapping:
-                result_cols.append(c.copy_with_changed_name(name + self.__suffixes[0]))
+                result_cols.append(c.copy_with_changed_name(name + self.__suffixes[0]))  # type: ignore
             else:
-                result_cols.append(c.copy())
+                result_cols.append(c.copy())  # type: ignore
 
         # Build right columns (skip same-name keys; apply suffix to overlapping non-key)
         for c in self.__other_frame.columns():
             name = c.get_name()
-            if any(name == l and l == r for l, r in key_pairs):
+            if any(name == left_key and left_key == right_key for left_key, right_key in key_pairs):
                 continue
 
             if name in overlapping:
-                result_cols.append(c.copy_with_changed_name(name + self.__suffixes[1]))
+                result_cols.append(c.copy_with_changed_name(name + self.__suffixes[1]))  # type: ignore
             else:
-                result_cols.append(c.copy())
+                result_cols.append(c.copy())  # type: ignore
 
         # Validate no duplicates
         names = [c.get_name() for c in result_cols]

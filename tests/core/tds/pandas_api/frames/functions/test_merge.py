@@ -14,7 +14,6 @@
 
 import json
 from textwrap import dedent
-import datetime
 
 import pytest
 
@@ -29,10 +28,6 @@ from pylegend.extensions.tds.pandas_api.frames.pandas_api_table_spec_input_frame
 from tests.test_helpers import generate_pure_query_and_compile
 from tests.test_helpers.test_legend_service_frames import simple_person_service_frame_pandas_api
 from pylegend.core.request.legend_client import LegendClient
-from pylegend.core.database.sql_to_string import (
-    SqlToStringConfig,
-    SqlToStringFormat
-)
 
 
 class TestMergeFunction:
@@ -60,43 +55,52 @@ class TestMergeFunction:
 
         # other_frame type error
         with pytest.raises(TypeError) as v:
-            frame.merge(123, how="inner")
+            frame.merge(123, how="inner")  # type: ignore
         assert v.value.args[0] == "Can only merge TdsFrame objects, a <class 'int'> was passed"
 
         # how type error
         with pytest.raises(TypeError) as v:
-            frame.merge(frame2, how=123)
+            frame.merge(frame2, how=123)  # type: ignore
         assert v.value.args[0] == "'how' must be str, got <class 'int'>"
 
         # on type error
         with pytest.raises(TypeError) as v:
-            frame.merge(frame2, how="inner", on=123)
+            frame.merge(frame2, how="inner", on=123)  # type: ignore
         assert v.value.args[0] == "Passing 'on' as a <class 'int'> is not supported. Provide 'on' as a tuple instead."
 
         # on type error
         with pytest.raises(TypeError) as v:
-            frame.merge(frame2, how="inner", on=['col1', 2])
+            frame.merge(frame2, how="inner", on=['col1', 2])  # type: ignore
         assert v.value.args[0] == "'on' must contain only str elements"
 
         # left_on type error
         with pytest.raises(TypeError) as v:
-            frame.merge(frame2, how="inner", left_on={"a": 1}, right_on='col1')
-        assert v.value.args[0] == "Passing 'left_on' as a <class 'dict'> is not supported. Provide 'left_on' as a tuple instead."
+            frame.merge(frame2, how="inner", left_on={"a": 1}, right_on='col1')  # type: ignore
+        assert v.value.args[0] == (
+            "Passing 'left_on' as a <class 'dict'> is not supported. "
+            "Provide 'left_on' as a tuple instead."
+        )
 
         # right_on type error
         with pytest.raises(TypeError) as v:
-            frame.merge(frame2, how="inner", left_on='col1', right_on={1, 2})
-        assert v.value.args[0] == "Passing 'right_on' as a <class 'set'> is not supported. Provide 'right_on' as a tuple instead."
+            frame.merge(frame2, how="inner", left_on='col1', right_on={1, 2})  # type: ignore
+        assert v.value.args[0] == (
+            "Passing 'right_on' as a <class 'set'> is not supported. "
+            "Provide 'right_on' as a tuple instead."
+        )
 
         # suffixes type error
         with pytest.raises(TypeError) as v:
-            frame.merge(frame2, how="inner", suffixes={"x", "y"})
-        assert v.value.args[0] == "Passing 'suffixes' as <class 'set'>, is not supported. Provide 'suffixes' as a tuple instead."
+            frame.merge(frame2, how="inner", suffixes={"x", "y"})  # type: ignore
+        assert v.value.args[0] == (
+            "Passing 'suffixes' as <class 'set'>, is not supported. "
+            "Provide 'suffixes' as a tuple instead."
+        )
 
         # suffixes value error
-        with pytest.raises(ValueError) as v:
-            frame.merge(frame2, how="inner", suffixes=('_x', '_y', '_z'))
-        assert v.value.args[0] == "too many values to unpack (expected 2)"
+        with pytest.raises(ValueError) as v1:
+            frame.merge(frame2, how="inner", suffixes=('_x', '_y', '_z'))  # type: ignore
+        assert v1.value.args[0] == "too many values to unpack (expected 2)"
 
     def test_merge_on_unsupported_errors(self) -> None:
         columns = [
@@ -168,19 +172,19 @@ class TestMergeFunction:
         assert v.value.args[0] == 'Can only pass argument "on" OR "left_on" and "right_on", not a combination of both.'
 
         # on key error
-        with pytest.raises(KeyError) as v:
+        with pytest.raises(KeyError) as k:
             frame.merge(frame2, how="inner", on='nol')
-        assert v.value.args[0] == "'nol' not found"
+        assert k.value.args[0] == "'nol' not found"
 
         # left_on key error
-        with pytest.raises(KeyError) as v:
+        with pytest.raises(KeyError) as k:
             frame.merge(frame2, how="inner", left_on='nol', right_on='pol1')
-        assert v.value.args[0] == "'nol' not found"
+        assert k.value.args[0] == "'nol' not found"
 
         # right_on key error
-        with pytest.raises(KeyError) as v:
+        with pytest.raises(KeyError) as k:
             frame.merge(frame2, how="inner", left_on='col1', right_on='nol')
-        assert v.value.args[0] == "'nol' not found"
+        assert k.value.args[0] == "'nol' not found"
 
         # left_on and right_on length mismatch
         with pytest.raises(ValueError) as v:
@@ -257,19 +261,21 @@ class TestMergeFunction:
             ) AS "root"'''
         assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == dedent(
-            '''\
-              #Table(test_schema.test_table)#
-                ->join(
-                  #Table(test_schema.test_table_2)#
-                    ->project(
-                      ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
-                    ),
-                  JoinKind.INNER,
-                  {l, r | $l.col1 == $r.col1__right_key_tmp}
-                )
-                ->project(
-                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
-                )'''
+            (
+                "  #Table(test_schema.test_table)#\n"
+                "    ->join(\n"
+                "      #Table(test_schema.test_table_2)#\n"
+                "        ->project(\n"
+                "          ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "        ),\n"
+                "      JoinKind.INNER,\n"
+                "      {l, r | $l.col1 == $r.col1__right_key_tmp}\n"
+                "    )\n"
+                "    ->project(\n"
+                "      ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, "
+                "col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "    )"
+            )
         )
 
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == (
@@ -327,19 +333,21 @@ class TestMergeFunction:
             ) AS "root"'''
         assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == dedent(
-            '''\
-              #Table(test_schema.test_table)#
-                ->join(
-                  #Table(test_schema.test_table_2)#
-                    ->project(
-                      ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
-                    ),
-                  JoinKind.LEFT,
-                  {l, r | $l.col1 == $r.col1__right_key_tmp}
-                )
-                ->project(
-                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
-                )'''
+            (
+                "  #Table(test_schema.test_table)#\n"
+                "    ->join(\n"
+                "      #Table(test_schema.test_table_2)#\n"
+                "        ->project(\n"
+                "          ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "        ),\n"
+                "      JoinKind.LEFT,\n"
+                "      {l, r | $l.col1 == $r.col1__right_key_tmp}\n"
+                "    )\n"
+                "    ->project(\n"
+                "      ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, "
+                "col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "    )"
+            )
         )
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == (
             "#Table(test_schema.test_table)#"
@@ -350,127 +358,128 @@ class TestMergeFunction:
             "col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"
         )
 
-        # # Right
-        # merged_frame = frame2.merge(frame3, how="right")
-        # expected = '''\
-        #         SELECT
-        #             "root"."col1" AS "col1",
-        #             "root"."pol2" AS "pol2",
-        #             "root"."pol3" AS "pol3"
-        #         FROM
-        #             (
-        #                 SELECT
-        #                     "left"."col1" AS "col1",
-        #                     "left"."pol2" AS "pol2",
-        #                     "left"."pol3" AS "pol3"
-        #                 FROM
-        #                     (
-        #                         SELECT
-        #                             "root".col1 AS "col1",
-        #                             "root".pol2 AS "pol2",
-        #                             "root".pol3 AS "pol3"
-        #                         FROM
-        #                             test_schema.test_table_2 AS "root"
-        #                     ) AS "left"
-        #                     RIGHT OUTER JOIN
-        #                         (
-        #                             SELECT
-        #                                 "root".col1 AS "col1",
-        #                                 "root".pol2 AS "pol2",
-        #                                 "root".pol3 AS "pol3"
-        #                             FROM
-        #                                 test_schema.test_table_3 AS "root"
-        #                         ) AS "right"
-        #                         ON ((("left"."col1" = "right"."col1") AND ("left"."pol2" = "right"."pol2")) AND ("left"."pol3" = "right"."pol3"))
-        #             ) AS "root"'''
-        # assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
-        # assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == dedent(
-        #     '''\
-        #       #Table(test_schema.test_table_2)#
-        #         ->join(
-        #           #Table(test_schema.test_table_3)#
-        #             ->project(
-        #               ~[col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2, pol3__right_key_tmp:x|$x.pol3]
-        #             ),
-        #           JoinKind.RIGHT,
-        #           {l, r | $l.col1 == $r.col1__right_key_tmp && $l.pol2 == $r.pol2__right_key_tmp && $l.pol3 == $r.pol3__right_key_tmp}
-        #         )
-        #         ->project(
-        #           ~[col1:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
-        #         )'''
-        # )
-        # assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == (
-        #     "#Table(test_schema.test_table_2)#"
-        #     "->join(#Table(test_schema.test_table_3)#"
-        #     "->project(~[col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2, pol3__right_key_tmp:x|$x.pol3]), "
-        #     "JoinKind.RIGHT, {l, r | $l.col1 == $r.col1__right_key_tmp && $l.pol2 == $r.pol2__right_key_tmp && $l.pol3 == $r.pol3__right_key_tmp})"
-        #     "->project(~[col1:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3])"
-        # )
+        # Right
+        merged_frame = frame2.merge(frame3, on=['col1', 'pol2'], how="right")
+        expected = '''\
+                SELECT
+                    "root"."col1" AS "col1",
+                    "root"."pol2" AS "pol2",
+                    "root"."pol3" AS "pol3"
+                FROM
+                    (
+                        SELECT
+                            "left"."col1" AS "col1",
+                            "left"."pol2" AS "pol2",
+                            "left"."pol3" AS "pol3"
+                        FROM
+                            (
+                                SELECT
+                                    "root".col1 AS "col1",
+                                    "root".pol2 AS "pol2",
+                                    "root".pol3 AS "pol3"
+                                FROM
+                                    test_schema.test_table_2 AS "root"
+                            ) AS "left"
+                            RIGHT OUTER JOIN
+                                (
+                                    SELECT
+                                        "root".col1 AS "col1",
+                                        "root".pol2 AS "pol2",
+                                        "root".pol3 AS "pol3"
+                                    FROM
+                                        test_schema.test_table_3 AS "root"
+                                ) AS "right"
+                                ON (("left"."col1" = "right"."col1") AND ("left"."pol2" = "right"."pol2"))
+                    ) AS "root"'''
+        assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == dedent(
+            (
+                "  #Table(test_schema.test_table_2)#\n"
+                "    ->join(\n"
+                "      #Table(test_schema.test_table_3)#\n"
+                "        ->project(\n"
+                "          ~[col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2, pol3__right_key_tmp:x|$x.pol3]\n"
+                "        ),\n"
+                "      JoinKind.RIGHT,\n"
+                "      {l, r | ($l.col1 == $r.col1__right_key_tmp) && ($l.pol2 == $r.pol2__right_key_tmp)}\n"
+                "    )\n"
+                "    ->project(\n"
+                "      ~[col1:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "    )"
+            )
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == (
+            "#Table(test_schema.test_table_2)#"
+            "->join(#Table(test_schema.test_table_3)#"
+            "->project(~[col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2, pol3__right_key_tmp:x|$x.pol3]), "
+            "JoinKind.RIGHT, {l, r | ($l.col1 == $r.col1__right_key_tmp) && ($l.pol2 == $r.pol2__right_key_tmp)})"  
+            "->project(~[col1:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3])"
+        )
 
-        # # Full with suffix
-        # merged_frame = frame2.merge(frame3, on=['col1', 'pol2'], how="outer", suffixes=('_left', '_right'))
-        # expected = '''\
-        #         SELECT
-        #             "root"."col1" AS "col1",
-        #             "root"."pol2" AS "pol2",
-        #             "root"."pol3_left" AS "pol3_left",
-        #             "root"."pol3_right" AS "pol3_right"
-        #         FROM
-        #             (
-        #                 SELECT
-        #                     "left"."col1" AS "col1",
-        #                     "left"."pol2" AS "pol2",
-        #                     "left"."pol3" AS "pol3_left",
-        #                     "right"."pol3" AS "pol3_right"
-        #                 FROM
-        #                     (
-        #                         SELECT
-        #                             "root".col1 AS "col1",
-        #                             "root".pol2 AS "pol2",
-        #                             "root".pol3 AS "pol3"
-        #                         FROM
-        #                             test_schema.test_table_2 AS "root"
-        #                     ) AS "left"
-        #                     FULL OUTER JOIN
-        #                         (
-        #                             SELECT
-        #                                 "root".col1 AS "col1",
-        #                                 "root".pol2 AS "pol2",
-        #                                 "root".pol3 AS "pol3"
-        #                             FROM
-        #                                 test_schema.test_table_3 AS "root"
-        #                         ) AS "right"
-        #                         ON (("left"."col1" = "right"."col1") AND ("left"."pol2" = "right"."pol2"))
-        #             ) AS "root"'''
-        # assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
-        # expected_pure_pretty = dedent(
-        #     '''\
-        #       #Table(test_schema.test_table_2)#
-        #         ->project(
-        #           ~[pol3_left:x|$x.pol3, col1:x|$x.col1, pol2:x|$x.pol2]
-        #         )
-        #         ->join(
-        #           #Table(test_schema.test_table_3)#
-        #             ->project(
-        #               ~[pol3_right:x|$x.pol3, col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2]
-        #             ),
-        #           JoinKind.FULL,
-        #           {l, r | $l.col1 == $r.col1__right_key_tmp && $l.pol2 == $r.pol2__right_key_tmp}
-        #         )
-        #         ->project(
-        #           ~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3_left, pol3_right:x|$x.pol3_right]
-        #         )'''
-        # )
-        # assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
-        # expected_pure_compact = (
-        #     "#Table(test_schema.test_table_2)#"
-        #     "->project(~[pol3_left:x|$x.pol3, col1:x|$x.col1, pol2:x|$x.pol2])"
-        #     "->join(#Table(test_schema.test_table_3)#"
-        #     "->project(~[pol3_right:x|$x.pol3, col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2]), "
-        #     "JoinKind.FULL, {l, r | $l.col1 == $r.col1__right_key_tmp && $l.pol2 == $r.pol2__right_key_tmp})"
-        #     "->project(~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3_left, pol3_right:x|$x.pol3_right])"
-        # )
-        # assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        # Full with suffix
+        merged_frame = frame2.merge(frame3, on=['col1', 'pol2'], how="outer", suffixes=('_left', '_right'))
+        expected = '''\
+                SELECT
+                    "root"."col1" AS "col1",
+                    "root"."pol2" AS "pol2",
+                    "root"."pol3_left" AS "pol3_left",
+                    "root"."pol3_right" AS "pol3_right"
+                FROM
+                    (
+                        SELECT
+                            "left"."col1" AS "col1",
+                            "left"."pol2" AS "pol2",
+                            "left"."pol3" AS "pol3_left",
+                            "right"."pol3" AS "pol3_right"
+                        FROM
+                            (
+                                SELECT
+                                    "root".col1 AS "col1",
+                                    "root".pol2 AS "pol2",
+                                    "root".pol3 AS "pol3"
+                                FROM
+                                    test_schema.test_table_2 AS "root"
+                            ) AS "left"
+                            FULL OUTER JOIN
+                                (
+                                    SELECT
+                                        "root".col1 AS "col1",
+                                        "root".pol2 AS "pol2",
+                                        "root".pol3 AS "pol3"
+                                    FROM
+                                        test_schema.test_table_3 AS "root"
+                                ) AS "right"
+                                ON (("left"."col1" = "right"."col1") AND ("left"."pol2" = "right"."pol2"))
+                    ) AS "root"'''
+        assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
+        expected_pure_pretty = dedent(
+            '''\
+              #Table(test_schema.test_table_2)#
+                ->project(
+                  ~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3]
+                )
+                ->join(
+                  #Table(test_schema.test_table_3)#
+                    ->project(
+                      ~[col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2, pol3_right:x|$x.pol3]
+                    ),
+                  JoinKind.FULL,
+                  {l, r | ($l.col1 == $r.col1__right_key_tmp) && ($l.pol2 == $r.pol2__right_key_tmp)}
+                )
+                ->project(
+                  ~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3_left, pol3_right:x|$x.pol3_right]
+                )'''
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
+        expected_pure_compact = (
+            "#Table(test_schema.test_table_2)#"
+            "->project(~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3])"
+            "->join(#Table(test_schema.test_table_3)#"
+            "->project(~[col1__right_key_tmp:x|$x.col1, pol2__right_key_tmp:x|$x.pol2, pol3_right:x|$x.pol3]), "
+            "JoinKind.FULL, {l, r | ($l.col1 == $r.col1__right_key_tmp) && ($l.pol2 == $r.pol2__right_key_tmp)})"
+            "->project(~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3_left, pol3_right:x|$x.pol3_right])"
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
     def test_merge_left_right_on_parameters(self) -> None:
         columns = [
@@ -534,19 +543,21 @@ class TestMergeFunction:
                     ) AS "root"'''
         assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected)
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == dedent(
-            '''\
-              #Table(test_schema.test_table)#
-                ->join(
-                  #Table(test_schema.test_table_2)#
-                    ->project(
-                      ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
-                    ),
-                  JoinKind.INNER,
-                  {l, r | $l.col1 == $r.col1__right_key_tmp}
-                )
-                ->project(
-                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
-                )'''
+            (
+                "  #Table(test_schema.test_table)#\n"
+                "    ->join(\n"
+                "      #Table(test_schema.test_table_2)#\n"
+                "        ->project(\n"
+                "          ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "        ),\n"
+                "      JoinKind.INNER,\n"
+                "      {l, r | $l.col1 == $r.col1__right_key_tmp}\n"
+                "    )\n"
+                "    ->project(\n"
+                "      ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, "
+                "col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]\n"
+                "    )"
+            )
         )
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == (
             "#Table(test_schema.test_table)#"
@@ -626,77 +637,77 @@ class TestMergeFunction:
             "->project(~[col1_right:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]), "
             "JoinKind.LEFT, {l, r | $l.col1_left == $r.pol3})"
         )
-        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
-        # # right
-        # merged_frame = frame.merge(frame2, how="right", left_on=['col1', 'col2'], right_on=['col1', 'pol2'])
-        # expected_sql = '''\
-        #         SELECT
-        #             "root"."col1" AS "col1",
-        #             "root"."col2" AS "col2",
-        #             "root"."col3" AS "col3",
-        #             "root"."col4" AS "col4",
-        #             "root"."col5" AS "col5",
-        #             "root"."pol2" AS "pol2",
-        #             "root"."pol3" AS "pol3"
-        #         FROM
-        #             (
-        #                 SELECT
-        #                     "left"."col1" AS "col1",
-        #                     "left"."col2" AS "col2",
-        #                     "left"."col3" AS "col3",
-        #                     "left"."col4" AS "col4",
-        #                     "left"."col5" AS "col5",
-        #                     "right"."pol2" AS "pol2",
-        #                     "right"."pol3" AS "pol3"
-        #                 FROM
-        #                     (
-        #                         SELECT
-        #                             "root".col1 AS "col1",
-        #                             "root".col2 AS "col2",
-        #                             "root".col3 AS "col3",
-        #                             "root".col4 AS "col4",
-        #                             "root".col5 AS "col5"
-        #                         FROM
-        #                             test_schema.test_table AS "root"
-        #                     ) AS "left"
-        #                     RIGHT OUTER JOIN
-        #                         (
-        #                             SELECT
-        #                                 "root".col1 AS "col1",
-        #                                 "root".pol2 AS "pol2",
-        #                                 "root".pol3 AS "pol3"
-        #                             FROM
-        #                                 test_schema.test_table_2 AS "root"
-        #                         ) AS "right"
-        #                         ON (("left"."col1" = "right"."col1") AND ("left"."col2" = "right"."pol2"))
-        #             ) AS "root"'''
-        #
-        # assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected_sql)
-        # expected_pure_pretty = dedent(
-        #     '''\
-        #       #Table(test_schema.test_table)#
-        #         ->join(
-        #           #Table(test_schema.test_table_2)#
-        #             ->project(
-        #               ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
-        #             ),
-        #           JoinKind.RIGHT,
-        #           {l, r | $l.col1 == $r.col1__right_key_tmp && $l.col2 == $r.pol2}
-        #         )
-        #         ->project(
-        #           ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
-        #         )'''
-        # )
-        # assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
-        # expected_pure_compact = (
-        #     "#Table(test_schema.test_table)#"
-        #     "->join(#Table(test_schema.test_table_2)#"
-        #     "->project(~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]), "
-        #     "JoinKind.RIGHT, {l, r | $l.col1 == $r.col1__right_key_tmp && $l.col2 == $r.pol2})"
-        #     "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"
-        # )
-        # assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        # right
+        merged_frame = frame.merge(frame2, how="right", left_on=['col1', 'col2'], right_on=['col1', 'pol2'])
+        expected_sql = '''\
+                SELECT
+                    "root"."col1" AS "col1",
+                    "root"."col2" AS "col2",
+                    "root"."col3" AS "col3",
+                    "root"."col4" AS "col4",
+                    "root"."col5" AS "col5",
+                    "root"."pol2" AS "pol2",
+                    "root"."pol3" AS "pol3"
+                FROM
+                    (
+                        SELECT
+                            "left"."col1" AS "col1",
+                            "left"."col2" AS "col2",
+                            "left"."col3" AS "col3",
+                            "left"."col4" AS "col4",
+                            "left"."col5" AS "col5",
+                            "right"."pol2" AS "pol2",
+                            "right"."pol3" AS "pol3"
+                        FROM
+                            (
+                                SELECT
+                                    "root".col1 AS "col1",
+                                    "root".col2 AS "col2",
+                                    "root".col3 AS "col3",
+                                    "root".col4 AS "col4",
+                                    "root".col5 AS "col5"
+                                FROM
+                                    test_schema.test_table AS "root"
+                            ) AS "left"
+                            RIGHT OUTER JOIN
+                                (
+                                    SELECT
+                                        "root".col1 AS "col1",
+                                        "root".pol2 AS "pol2",
+                                        "root".pol3 AS "pol3"
+                                    FROM
+                                        test_schema.test_table_2 AS "root"
+                                ) AS "right"
+                                ON (("left"."col1" = "right"."col1") AND ("left"."col2" = "right"."pol2"))
+                    ) AS "root"'''
+
+        assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected_sql)
+        expected_pure_pretty = dedent(
+            '''\
+              #Table(test_schema.test_table)#
+                ->join(
+                  #Table(test_schema.test_table_2)#
+                    ->project(
+                      ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
+                    ),
+                  JoinKind.RIGHT,
+                  {l, r | ($l.col1 == $r.col1__right_key_tmp) && ($l.col2 == $r.pol2)}
+                )
+                ->project(
+                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]  # noqa: E501
+                )'''
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
+        expected_pure_compact = (
+            "#Table(test_schema.test_table)#"
+            "->join(#Table(test_schema.test_table_2)#"
+            "->project(~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]), "
+            "JoinKind.RIGHT, {l, r | ($l.col1 == $r.col1__right_key_tmp) && ($l.col2 == $r.pol2)})"
+            "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"  # noqa: E501
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
 
     def test_merge_chained(self) -> None:
         columns = [
@@ -716,7 +727,7 @@ class TestMergeFunction:
         frame2: PandasApiTdsFrame = PandasApiTableSpecInputFrame(['test_schema', 'test_table_2'], columns2)
 
         # Merge
-        merged_frame = frame.merge(frame2, how="inner", on='col1').merge(frame2, how="left", left_on='col1', right_on='pol2', suffixes=('_left', '_right'))
+        merged_frame = frame.merge(frame2, how="inner", on='col1').merge(frame2, how="left", left_on='col1', right_on='pol2', suffixes=('_left', '_right'))  # noqa: E501
         expected_pure_pretty = dedent(
             '''\
               #Table(test_schema.test_table)#
@@ -729,10 +740,10 @@ class TestMergeFunction:
                   {l, r | $l.col1 == $r.col1__right_key_tmp}
                 )
                 ->project(
-                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
+                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]  # noqa: E501
                 )
                 ->project(
-                  ~[col1_left:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2_left:x|$x.pol2, pol3_left:x|$x.pol3]
+                  ~[col1_left:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2_left:x|$x.pol2, pol3_left:x|$x.pol3]  # noqa: E501
                 )
                 ->join(
                   #Table(test_schema.test_table_2)#
@@ -748,8 +759,8 @@ class TestMergeFunction:
             "->join(#Table(test_schema.test_table_2)#"
             "->project(~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]), "
             "JoinKind.INNER, {l, r | $l.col1 == $r.col1__right_key_tmp})"
-            "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"
-            "->project(~[col1_left:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2_left:x|$x.pol2, pol3_left:x|$x.pol3])"
+            "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"  # noqa: E501
+            "->project(~[col1_left:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2_left:x|$x.pol2, pol3_left:x|$x.pol3])"  # noqa: E501
             "->join(#Table(test_schema.test_table_2)#"
             "->project(~[col1_right:x|$x.col1, pol2_right:x|$x.pol2, pol3_right:x|$x.pol3]), "
             "JoinKind.LEFT, {l, r | $l.col1_left == $r.pol2_right})"
@@ -836,12 +847,12 @@ class TestMergeFunction:
                 ) AS "root"'''
         )
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
-        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
         assert merged_frame.to_sql_query(FrameToSqlConfig()) == expected_sql
 
         # Truncate
         merged_frame = frame.merge(frame2)
-        newframe = merged_frame.truncate(before = 1, after = 3)
+        newframe = merged_frame.truncate(before=1, after=3)
 
         expected_pure_pretty = dedent(
             '''\
@@ -855,7 +866,7 @@ class TestMergeFunction:
                   {l, r | $l.col1 == $r.col1__right_key_tmp}
                 )
                 ->project(
-                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
+                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]  # noqa: E501
                 )
                 ->slice(1, 4)'''
         )
@@ -864,7 +875,7 @@ class TestMergeFunction:
             "->join(#Table(test_schema.test_table_2)#"
             "->project(~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]), "
             "JoinKind.INNER, {l, r | $l.col1 == $r.col1__right_key_tmp})"
-            "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"
+            "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"  # noqa: E501
             "->slice(1, 4)"
         )
         expected_sql = dedent(
@@ -913,7 +924,7 @@ class TestMergeFunction:
             OFFSET 1'''
         )
         assert generate_pure_query_and_compile(newframe, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
-        assert generate_pure_query_and_compile(newframe, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(newframe, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
         assert newframe.to_sql_query(FrameToSqlConfig()) == expected_sql
 
         # Filter
@@ -980,16 +991,15 @@ class TestMergeFunction:
                 ) AS "root"'''
         )
         assert generate_pure_query_and_compile(newframe, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
-        assert generate_pure_query_and_compile(newframe, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
+        assert generate_pure_query_and_compile(newframe, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
         assert newframe.to_sql_query(FrameToSqlConfig()) == expected_sql
-
 
     def test_e2e_merge(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
         frame: PandasApiTdsFrame = simple_person_service_frame_pandas_api(legend_test_server["engine_port"])
         frame2: PandasApiTdsFrame = simple_person_service_frame_pandas_api(legend_test_server["engine_port"])
 
         # on with suffix
-        newframe = frame.merge(frame2, how = 'left', on=['First Name', 'Age'])
+        newframe = frame.merge(frame2, how='left', on=['First Name', 'Age'])
         expected = {
             "columns": [
                 "First Name",
@@ -1014,7 +1024,7 @@ class TestMergeFunction:
 
         # left/right on
         frame = frame.rename({"First Name": "FirstName"})
-        newframe = frame.merge(frame2, how = 'left', left_on=['FirstName'], right_on=['First Name'])
+        newframe = frame.merge(frame2, how='left', left_on=['FirstName'], right_on=['First Name'])
         expected = {
             "columns": [
                 "FirstName",
@@ -1042,7 +1052,7 @@ class TestMergeFunction:
         assert json.loads(res)["result"] == expected
 
         # right join
-        newframe = frame.merge(frame2, how = 'right', left_on=['FirstName'], right_on=['First Name'])
+        newframe = frame.merge(frame2, how='right', left_on=['FirstName'], right_on=['First Name'])
         expected = {
             "columns": [
                 "FirstName",
@@ -1102,7 +1112,7 @@ class TestMergeFunction:
         frame2: PandasApiTdsFrame = simple_person_service_frame_pandas_api(legend_test_server["engine_port"])
 
         # merge
-        newframe = frame.merge(frame2, how = 'left', on=['First Name', 'Age']).merge(frame2, how = 'left', on=['First Name'])
+        newframe = frame.merge(frame2, how='left', on=['First Name', 'Age']).merge(frame2, how='left', on=['First Name'])
         expected = {
             "columns": [
                 "First Name",
@@ -1131,7 +1141,7 @@ class TestMergeFunction:
         assert json.loads(res)["result"] == expected
 
         # truncate
-        newframe = frame.merge(frame2, how = 'left', on=['First Name', 'Age']).truncate(before=2, after=5)
+        newframe = frame.merge(frame2, how='left', on=['First Name', 'Age']).truncate(before=2, after=5)
         expected = {
             "columns": [
                 "First Name",
@@ -1152,7 +1162,7 @@ class TestMergeFunction:
         assert json.loads(res)["result"] == expected
 
         # filter
-        newframe = frame.filter(items=['First Name', 'Age']).merge(frame2, how = 'left', left_on=['First Name'], right_on=['Last Name'])
+        newframe = frame.filter(items=['First Name', 'Age']).merge(frame2, how='left', left_on=['First Name'], right_on=['Last Name'])  # noqa: E501
         expected = {
             "columns": [
                 "First Name_x",
