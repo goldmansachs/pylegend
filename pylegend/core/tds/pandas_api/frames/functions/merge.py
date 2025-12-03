@@ -153,31 +153,6 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             expr = part if expr is None else (expr & part)
         return expr
 
-    def __build_rename_chain(
-            self,
-            frame_pure: str,
-            rename_specs: PyLegendSequence[PyLegendTuple[str, str]],
-            config: FrameToPureConfig
-    ) -> str:
-        if not rename_specs:
-            return frame_pure
-
-        multiline = bool(getattr(config, "_FrameToPureConfig__pretty", False))
-        # print("pretty = ", multiline)
-
-        out = frame_pure
-        for orig, new in rename_specs:
-            if multiline:
-                out = (
-                    f"{out}{config.separator(1)}"
-                    f"->rename({config.separator(2)}~{orig}, ~{new}{config.separator(1)})"
-                )
-            else:
-                out = out.rstrip("\r\n ")
-                out = f"{out}->rename(~{orig}, ~{new})"
-
-        return out
-
     def __join_type(self) -> JoinType:
         how_lower = self.__how.lower()
         if how_lower == "inner":
@@ -307,10 +282,6 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             lk for (lk, rk) in key_pairs if lk == rk
         }
 
-        # Build rename specs
-        left_rename_specs = []
-        right_rename_specs = []
-
         left_rename_map = {}
         right_rename_map = {}
 
@@ -319,46 +290,40 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             if col in identical_key_names:
                 continue
 
-            left_rename_specs.append((col, col + left_suf))
             left_rename_map[col] = col + left_suf
-            right_rename_specs.append((col, col + right_suf))
             right_rename_map[col] = col + right_suf
 
         # Temporary rename for identical key names on right
         temp_right_key_map = {}
         for k in identical_key_names:
             temp_name = k + "__right_key_tmp"
-            right_rename_specs.append((k, temp_name))
             temp_right_key_map[k] = temp_name
 
-        left_pure = self.__base_frame.to_pure(config)
-        right_pure = self.__other_frame.to_pure(config.push_indent(2))
+        # Rename
+        left_frame = (self.__base_frame.rename(columns=left_rename_map, errors="raise")
+                      if left_rename_map else self.__base_frame)
 
-        left_pure = self.__build_rename_chain(left_pure, left_rename_specs, config)
-        right_pure = self.__build_rename_chain(right_pure, right_rename_specs, config.push_indent(2))
+        right_map = {**right_rename_map, **temp_right_key_map} if (right_rename_map or temp_right_key_map) else None
+        right_frame = (self.__other_frame.rename(columns=right_map, errors="raise")
+                       if right_map else self.__other_frame)
 
         # Build join condition expression
-        left_row = PandasApiTdsRow.from_tds_frame("l", self.__base_frame)
-        right_row = PandasApiTdsRow.from_tds_frame("r", self.__other_frame)
+        left_row = PandasApiTdsRow.from_tds_frame("l", left_frame)
+        right_row = PandasApiTdsRow.from_tds_frame("r", right_frame)
 
         expr = None
         for l_key, r_key in key_pairs:
-            part = (left_row[l_key] == right_row[r_key])
+            l_eff = left_rename_map.get(l_key, l_key)
+            r_eff = right_map.get(r_key, r_key)
+            part = (left_row[l_eff] == right_row[r_eff])
             expr = part if expr is None else (expr & part)
 
         if not isinstance(expr, PyLegendPrimitive):
             expr = convert_literal_to_literal_expression(expr)
         cond_str = expr.to_pure_expression(config.push_indent(2))
 
-        # Replace changed column names
-        for orig, tmp in temp_right_key_map.items():
-            cond_str = cond_str.replace(f"$r.{orig}", f"$r.{tmp}")
-
-        for orig, new in left_rename_map.items():
-            cond_str = cond_str.replace(f"$l.{orig}", f"$l.{new}")
-
-        for orig, new in right_rename_map.items():
-            cond_str = cond_str.replace(f"$r.{orig}", f"$r.{new}")
+        left_pure = left_frame.to_pure(config)
+        right_pure = right_frame.to_pure(config.push_indent(2))
 
         join_expr = (
             f"{left_pure}{config.separator(1)}"
@@ -367,7 +332,6 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             f"JoinKind.{join_kind},{config.separator(2, True)}"
             f"{generate_pure_lambda('l, r', cond_str)}{config.separator(1)})"
         )
-        # print("JOIN PURE: ", join_expr)
 
         # Only project if temporary right key renames exist
         if temp_right_key_map:
