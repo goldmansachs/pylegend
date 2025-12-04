@@ -99,7 +99,7 @@ class TestMergeFunction:
 
         with pytest.raises(TypeError) as v:
             frame.join(frame2, how="inner", lsuffix=2, rsuffix='y')  # type: ignore
-        assert v.value.args[0] == "'suffixes' must contain only str elements"
+        assert v.value.args[0] == "'suffixes' elements must be str or None"
 
         # suffixes value error
         with pytest.raises(ValueError) as v1:
@@ -200,6 +200,11 @@ class TestMergeFunction:
         with pytest.raises(ValueError) as v:
             frame.merge(frame2, how="inner")
         assert v.value.args[0] == "No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns."
+
+        # how = cross
+        with pytest.raises(ValueError) as v:
+            frame.merge(frame2, how="cross", on='col1')
+        assert v.value.args[0] == "Can not pass on, right_on, left_on for how='cross'"
 
     def test_merge_on_parameter(self) -> None:
         columns = [
@@ -492,6 +497,80 @@ class TestMergeFunction:
             "->project(~[col1:x|$x.col1, pol2:x|$x.pol2, pol3_left:x|$x.pol3_left, pol3_right:x|$x.pol3_right])"
         )
         assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact  # noqa: E501
+
+        # CROSS
+        merged_frame = frame.merge(frame2, how="cross")
+
+        expected_sql = dedent(
+            '''\
+            SELECT
+                "root"."col1" AS "col1",
+                "root"."col2" AS "col2",
+                "root"."col3" AS "col3",
+                "root"."col4" AS "col4",
+                "root"."col5" AS "col5",
+                "root"."pol2" AS "pol2",
+                "root"."pol3" AS "pol3"
+            FROM
+                (
+                    SELECT
+                        "left"."col1" AS "col1",
+                        "left"."col2" AS "col2",
+                        "left"."col3" AS "col3",
+                        "left"."col4" AS "col4",
+                        "left"."col5" AS "col5",
+                        "right"."pol2" AS "pol2",
+                        "right"."pol3" AS "pol3"
+                    FROM
+                        (
+                            SELECT
+                                "root".col1 AS "col1",
+                                "root".col2 AS "col2",
+                                "root".col3 AS "col3",
+                                "root".col4 AS "col4",
+                                "root".col5 AS "col5"
+                            FROM
+                                test_schema.test_table AS "root"
+                        ) AS "left"
+                        CROSS JOIN
+                            (
+                                SELECT
+                                    "root".col1 AS "col1",
+                                    "root".pol2 AS "pol2",
+                                    "root".pol3 AS "pol3"
+                                FROM
+                                    test_schema.test_table_2 AS "root"
+                            ) AS "right"
+                            ON ("left"."col1" = "right"."col1")
+                ) AS "root"'''
+        )
+        assert merged_frame.to_sql_query(FrameToSqlConfig()) == dedent(expected_sql)
+
+        expected_pure_pretty = dedent(
+            '''\
+              #Table(test_schema.test_table)#
+                ->join(
+                  #Table(test_schema.test_table_2)#
+                    ->project(
+                      ~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]
+                    ),
+                  JoinKind.INNER,
+                  {l, r | 1==1}
+                )
+                ->project(
+                  ~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3]
+                )'''
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(), self.legend_client) == expected_pure_pretty
+
+        expected_pure_compact = (
+            "#Table(test_schema.test_table)#"
+            "->join(#Table(test_schema.test_table_2)#"
+            "->project(~[col1__right_key_tmp:x|$x.col1, pol2:x|$x.pol2, pol3:x|$x.pol3]), "
+            "JoinKind.INNER, {l, r | 1==1})"
+            "->project(~[col1:x|$x.col1, col2:x|$x.col2, col3:x|$x.col3, col4:x|$x.col4, col5:x|$x.col5, pol2:x|$x.pol2, pol3:x|$x.pol3])"
+        )
+        assert generate_pure_query_and_compile(merged_frame, FrameToPureConfig(pretty=False), self.legend_client) == expected_pure_compact
 
     def test_merge_left_right_on_parameters(self) -> None:
         columns = [
@@ -1274,6 +1353,34 @@ class TestMergeFunction:
 
         # full join
         newframe = frame.merge(frame2, how='outer', left_on=['FirstName'], right_on=['First Name'])
+        expected = {
+            "columns": [
+                "FirstName",
+                "Last Name_x",
+                "Age_x",
+                "Firm/Legal Name_x",
+                "First Name",
+                "Last Name_y",
+                "Age_y",
+                "Firm/Legal Name_y",
+            ],
+            "rows": [
+                {"values": ["Peter", "Smith", 23, "Firm X", "Peter", "Smith", 23, "Firm X"]},
+                {"values": ["John", "Johnson", 22, "Firm X", "John", "Johnson", 22, "Firm X"]},
+                {"values": ["John", "Johnson", 22, "Firm X", "John", "Hill", 12, "Firm X"]},
+                {"values": ["John", "Hill", 12, "Firm X", "John", "Johnson", 22, "Firm X"]},
+                {"values": ["John", "Hill", 12, "Firm X", "John", "Hill", 12, "Firm X"]},
+                {"values": ["Anthony", "Allen", 22, "Firm X", "Anthony", "Allen", 22, "Firm X"]},
+                {"values": ["Fabrice", "Roberts", 34, "Firm A", "Fabrice", "Roberts", 34, "Firm A"]},
+                {"values": ["Oliver", "Hill", 32, "Firm B", "Oliver", "Hill", 32, "Firm B"]},
+                {"values": ["David", "Harris", 35, "Firm C", "David", "Harris", 35, "Firm C"]},
+            ],
+        }
+        res = newframe.execute_frame_to_string()
+        assert json.loads(res)["result"] == expected
+
+        # cross join
+        newframe = frame.merge(frame2, how='cross', left_on=['FirstName'], right_on=['First Name'])
         expected = {
             "columns": [
                 "FirstName",

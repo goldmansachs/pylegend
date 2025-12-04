@@ -60,11 +60,16 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
     __on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
     __left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
     __right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
-    __left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]]
-    __right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]]
-    __sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]]
-    __suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]]
-    __indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]]
+    __left_index: PyLegendOptional[bool]
+    __right_index: PyLegendOptional[bool]
+    __sort: PyLegendOptional[bool]
+    __suffixes: PyLegendOptional[
+        PyLegendUnion[
+            PyLegendTuple[PyLegendUnion[str, None], PyLegendUnion[str, None]],
+            PyLegendList[PyLegendUnion[str, None]],
+        ]
+    ]
+    __indicator: PyLegendOptional[PyLegendUnion[bool, str]]
     __validate: PyLegendOptional[str]
 
     @classmethod
@@ -79,11 +84,16 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
             left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
             right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
-            left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]],
-            right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]],
-            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]],
-            suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]],
-            indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]],
+            left_index: PyLegendOptional[bool],
+            right_index: PyLegendOptional[bool],
+            sort: PyLegendOptional[bool],
+            suffixes: PyLegendOptional[
+                PyLegendUnion[
+                    PyLegendTuple[PyLegendUnion[str, None], PyLegendUnion[str, None]],
+                    PyLegendList[PyLegendUnion[str, None]],
+                ]
+            ],
+            indicator: PyLegendOptional[PyLegendUnion[bool, str]],
             validate: PyLegendOptional[str]
     ) -> None:
         self.__base_frame = base_frame
@@ -145,6 +155,17 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         inferred = [c for c in left_cols if c in right_cols]
         return [(k, k) for k in inferred]
 
+    def __normalize_suffixes(self) -> None:
+        if self.__suffixes is None:
+            self.__suffixes = ["_x", "_y"]
+            return
+
+        # Convert None to empty string and coerce to list[str]
+        left = self.__suffixes[0] or ""
+        right = self.__suffixes[1] or ""
+
+        self.__suffixes = [left, right]
+
     # Internal auto join condition builder (returns PyLegendBoolean expression)
     def __build_condition(self) -> PyLegendBoolean:
         key_pairs = self.__derive_key_pairs()
@@ -168,7 +189,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         if how_lower == "outer":
             return JoinType.FULL
         if how_lower == "cross":
-            raise NotImplementedError("Cross join not implemented yet in PURE")
+            return JoinType.CROSS
         raise ValueError("do not recognize join method " + self.__how)  # type: ignore
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
@@ -176,16 +197,19 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         left_query = copy_query(self.__base_frame.to_sql_query_object(config))
         right_query = copy_query(self.__other_frame.to_sql_query_object(config))
 
-        join_condition_expr = self.__build_condition()
-        if isinstance(join_condition_expr, bool):
-            join_condition_expr = PyLegendBoolean(PyLegendBooleanLiteralExpression(join_condition_expr))
-        join_sql_expr = join_condition_expr.to_sql_expression(
-            {
-                "left": create_sub_query(left_query, config, "left"),
-                "right": create_sub_query(right_query, config, "right"),
-            },
-            config
-        )
+        join_criteria = None
+        join_type = self.__join_type()
+        if join_type != JoinType.CROSS:
+            join_condition_expr = self.__build_condition()
+            if isinstance(join_condition_expr, bool):
+                join_condition_expr = PyLegendBoolean(PyLegendBooleanLiteralExpression(join_condition_expr))
+            join_sql_expr = join_condition_expr.to_sql_expression(
+                {
+                    "left": create_sub_query(left_query, config, "left"),
+                    "right": create_sub_query(right_query, config, "right"),
+                },
+                config
+            )
 
         left_alias = db_extension.quote_identifier("left")
         right_alias = db_extension.quote_identifier("right")
@@ -223,6 +247,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             select_items.append(
                 SingleColumn(q_out, QualifiedNameReference(QualifiedName(parts=[right_alias, q_in])))
             )
+
 
         join_spec = QuerySpecification(
             select=Select(selectItems=select_items, distinct=False),
@@ -262,6 +287,8 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             join_kind = "RIGHT"
         elif how_lower == "outer":
             join_kind = "FULL"
+        elif how_lower == "cross":
+            join_kind = "INNER"
 
         # Resolve key pairs
         key_pairs = self.__derive_key_pairs()
@@ -274,7 +301,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             left_suf, right_suf = "_x", "_y"
         else:
             s = list(self.__suffixes)
-            left_suf, right_suf = s[0], s[1]
+            left_suf, right_suf = s[0], s[1]  # type: ignore
 
         left_col_set = set(left_cols)
         right_col_set = set(right_cols)
@@ -311,19 +338,22 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
                        if right_map else self.__other_frame)
 
         # Build join condition expression
-        left_row = PandasApiTdsRow.from_tds_frame("l", left_frame)
-        right_row = PandasApiTdsRow.from_tds_frame("r", right_frame)
+        if how_lower != "cross":
+            left_row = PandasApiTdsRow.from_tds_frame("l", left_frame)
+            right_row = PandasApiTdsRow.from_tds_frame("r", right_frame)
 
-        expr = None
-        for l_key, r_key in key_pairs:
-            l_eff = left_rename_map.get(l_key, l_key)
-            r_eff = right_map.get(r_key, r_key)  # type: ignore
-            part = (left_row[l_eff] == right_row[r_eff])
-            expr = part if expr is None else (expr & part)
+            expr = None
+            for l_key, r_key in key_pairs:
+                l_eff = left_rename_map.get(l_key, l_key)
+                r_eff = right_map.get(r_key, r_key)  # type: ignore
+                part = (left_row[l_eff] == right_row[r_eff])
+                expr = part if expr is None else (expr & part)
 
-        if not isinstance(expr, PyLegendPrimitive):
-            expr = convert_literal_to_literal_expression(expr)  # type: ignore
-        cond_str = expr.to_pure_expression(config.push_indent(2))  # type: ignore
+            if not isinstance(expr, PyLegendPrimitive):
+                expr = convert_literal_to_literal_expression(expr)  # type: ignore
+            cond_str = expr.to_pure_expression(config.push_indent(2))  # type: ignore
+        else:
+            cond_str = "1==1"
 
         left_pure = left_frame.to_pure(config)  # type: ignore
         right_pure = right_frame.to_pure(config.push_indent(2))  # type: ignore
@@ -427,6 +457,10 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         if not isinstance(self.__how, str):
             raise TypeError(f"'how' must be str, got {type(self.__how)}")
 
+        if self.__how.lower() == "cross":
+            if any(v is not None for v in (self.__on, self.__left_on, self.__right_on)):
+                raise ValueError("Can not pass on, right_on, left_on for how='cross'")
+
         # key parameters: on / left_on / right_on
         def _validate_keys_param(param_name: str, value: PyLegendUnion[str, PyLegendSequence[str], None]) -> None:
             if value is None:
@@ -452,8 +486,9 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
                 f"Passing 'suffixes' as {type(self.__suffixes)}, is not supported. "
                 "Provide 'suffixes' as a tuple instead."
             )
-        if not all(isinstance(s, str) for s in self.__suffixes):
-            raise TypeError("'suffixes' must contain only str elements")
+        for s in self.__suffixes:
+            if s is not None and not isinstance(s, str):
+                raise TypeError("'suffixes' elements must be str or None")
         if len(self.__suffixes) != 2:
             raise ValueError("too many values to unpack (expected 2)")
 
@@ -472,9 +507,10 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             raise NotImplementedError("Validate parameter is not supported yet in PandasApi merge function")
 
         key_pairs = self.__derive_key_pairs()  # runs key validations
-        if not key_pairs:
+        if not key_pairs and self.__how.lower() != "cross":
             raise ValueError("No merge keys resolved. Specify 'on' or 'left_on'/'right_on', or ensure common columns.")
 
         self.__join_type()  # runs how validation
+        self.__normalize_suffixes()  # runs suffixes validation
 
         return True

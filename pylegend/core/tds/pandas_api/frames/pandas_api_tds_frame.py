@@ -139,11 +139,16 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
             left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
             right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
-            left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
-            right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
-            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
-            suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]] = ("_x", "_y"),
-            indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]] = False,
+            left_index: PyLegendOptional[bool] = False,
+            right_index: PyLegendOptional[bool] = False,
+            sort: PyLegendOptional[bool] = False,
+            suffixes: PyLegendOptional[
+                PyLegendUnion[
+                    PyLegendTuple[PyLegendUnion[str, None], PyLegendUnion[str, None]],
+                    PyLegendList[PyLegendUnion[str, None]],
+                ]
+            ] = ("_x", "_y"),
+            indicator: PyLegendOptional[PyLegendUnion[bool, str]] = False,
             validate: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
@@ -156,7 +161,7 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             how: PyLegendOptional[str] = "left",
             lsuffix: str = "",
             rsuffix: str = "",
-            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
+            sort: PyLegendOptional[bool] = False,
             validate: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
@@ -167,10 +172,10 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             mapper: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
             index: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
             columns: PyLegendOptional[PyLegendUnion[PyLegendDict[str, str], PyLegendCallable[[str], str]]] = None,
-            axis: PyLegendUnion[str, int, PyLegendInteger] = 1,
-            inplace: PyLegendUnion[bool, PyLegendBoolean] = False,
-            copy: PyLegendUnion[bool, PyLegendBoolean] = True,
-            level: PyLegendOptional[PyLegendUnion[int, PyLegendInteger, str]] = None,
+            axis: PyLegendUnion[str, int] = 1,
+            inplace: PyLegendUnion[bool] = False,
+            copy: PyLegendUnion[bool] = True,
+            level: PyLegendOptional[PyLegendUnion[int, str]] = None,
             errors: str = "ignore",
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
