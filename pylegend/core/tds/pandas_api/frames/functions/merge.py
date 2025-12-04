@@ -60,11 +60,11 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
     __on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
     __left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
     __right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]]
-    __left_index: PyLegendOptional[bool]
-    __right_index: PyLegendOptional[bool]
-    __sort: PyLegendOptional[bool]
+    __left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]]
+    __right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]]
+    __sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]]
     __suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]]
-    __indicator: PyLegendOptional[PyLegendUnion[bool, str]]
+    __indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]]
     __validate: PyLegendOptional[str]
 
     @classmethod
@@ -79,11 +79,11 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
             left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
             right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]],
-            left_index: PyLegendOptional[bool],
-            right_index: PyLegendOptional[bool],
-            sort: PyLegendOptional[bool],
+            left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]],
+            right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]],
+            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]],
             suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]],
-            indicator: PyLegendOptional[PyLegendUnion[bool, str]],
+            indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]],
             validate: PyLegendOptional[str]
     ) -> None:
         self.__base_frame = base_frame
@@ -98,6 +98,10 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         self.__suffixes = suffixes
         self.__indicator = indicator
         self.__validate = validate
+        self.__sortkeys = []  # type: PyLegendList[str]
+
+    def get_sort_keys(self) -> PyLegendList[str]:
+        return self.__sortkeys
 
     # Key resolution helpers
     def __normalize_keys(
@@ -245,6 +249,7 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             limit=None,
             offset=None
         )
+
         return create_sub_query(join_spec, config, "root")
 
     def to_pure(self, config: FrameToPureConfig) -> str:
@@ -269,8 +274,6 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
             left_suf, right_suf = "_x", "_y"
         else:
             s = list(self.__suffixes)
-            if len(s) != 2:
-                raise ValueError("Expected exactly two suffixes")
             left_suf, right_suf = s[0], s[1]
 
         left_col_set = set(left_cols)
@@ -398,6 +401,17 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
         names = [c.get_name() for c in result_cols]
         if len(names) != len(set(names)):
             raise ValueError("Resulting merged columns contain duplicates after suffix application")
+
+        if self.__sort:
+            for lk, rk in key_pairs:
+                left_out = (lk + self.__suffixes[0]) if (lk in overlapping) else lk  # type: ignore
+                self.__sortkeys.append(left_out)
+
+                if rk != lk:
+                    right_out = (rk + self.__suffixes[1]) if (rk in overlapping) else rk  # type: ignore
+                    # right identical-name keys are skipped
+                    self.__sortkeys.append(right_out)
+
         return result_cols
 
     def validate(self) -> bool:
@@ -438,15 +452,18 @@ class PandasApiMergeFunction(PandasApiAppliedFunction):
                 f"Passing 'suffixes' as {type(self.__suffixes)}, is not supported. "
                 "Provide 'suffixes' as a tuple instead."
             )
+        if not all(isinstance(s, str) for s in self.__suffixes):
+            raise TypeError("'suffixes' must contain only str elements")
         if len(self.__suffixes) != 2:
             raise ValueError("too many values to unpack (expected 2)")
+
+        # Sort
+        if self.__sort is not None and not isinstance(self.__sort, (bool, PyLegendBoolean)):
+            raise TypeError(f"Sort parameter must be bool, got {type(self.__sort)}")
 
         # Unsupported parameters
         if self.__left_index or self.__right_index:
             raise NotImplementedError("Merging on index is not supported yet in PandasApi merge function")
-
-        if self.__sort:
-            raise NotImplementedError("Sort parameter is not supported yet in PandasApi merge function")
 
         if self.__indicator:
             raise NotImplementedError("Indicator parameter is not supported yet in PandasApi merge function")

@@ -282,11 +282,11 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
             left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
             right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
-            left_index: PyLegendOptional[bool] = False,
-            right_index: PyLegendOptional[bool] = False,
-            sort: PyLegendOptional[bool] = False,
+            left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
+            right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
+            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
             suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]] = ("_x", "_y"),
-            indicator: PyLegendOptional[PyLegendUnion[bool, str]] = False,
+            indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]] = False,
             validate: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         """
@@ -302,21 +302,56 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         from pylegend.core.tds.pandas_api.frames.functions.merge import (
             PandasApiMergeFunction
         )
-        return PandasApiAppliedFunctionTdsFrame(
-            PandasApiMergeFunction(
-                self,
-                other,  # type: ignore
-                how=how,
-                on=on,
-                left_on=left_on,
-                right_on=right_on,
-                left_index=left_index,
-                right_index=right_index,
-                sort=sort,
-                suffixes=suffixes,
-                indicator=indicator,
-                validate=validate
+        merge_fn = PandasApiMergeFunction(
+            self,
+            other,  # type: ignore
+            how=how,
+            on=on,
+            left_on=left_on,
+            right_on=right_on,
+            left_index=left_index,
+            right_index=right_index,
+            sort=sort,
+            suffixes=suffixes,
+            indicator=indicator,
+            validate=validate
+        )
+        merged = PandasApiAppliedFunctionTdsFrame(merge_fn)
+
+        if sort:
+            return merged.sort_values(
+                by=merge_fn.get_sort_keys(),
+                axis=0,
+                ascending=True,
+                inplace=False,
+                kind=None,
+                na_position="last",
+                ignore_index=True,
+                key=None
             )
+        else:
+            return merged
+
+    def join(
+            self,
+            other: "PandasApiTdsFrame",
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            how: PyLegendOptional[str] = "left",
+            lsuffix: str = "",
+            rsuffix: str = "",
+            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
+            validate: PyLegendOptional[str] = None
+    ) -> "PandasApiTdsFrame":
+        """
+        Pandas-like join delegating to merge. No index support, only column-on-column via `on`.
+        """
+        return self.merge(
+            other=other,
+            how=how,
+            on=on,
+            sort=sort,
+            suffixes=[lsuffix, rsuffix],
+            validate=validate
         )
 
     def rename(

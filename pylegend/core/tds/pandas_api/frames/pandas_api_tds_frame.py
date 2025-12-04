@@ -139,11 +139,24 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
             left_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
             right_on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
-            left_index: PyLegendOptional[bool] = False,
-            right_index: PyLegendOptional[bool] = False,
-            sort: PyLegendOptional[bool] = False,
+            left_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
+            right_index: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
+            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
             suffixes: PyLegendOptional[PyLegendUnion[PyLegendTuple[str, str], PyLegendList[str]]] = ("_x", "_y"),
-            indicator: PyLegendOptional[PyLegendUnion[bool, str]] = False,
+            indicator: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean, str]] = False,
+            validate: PyLegendOptional[str] = None
+    ) -> "PandasApiTdsFrame":
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def join(
+            self,
+            other: "PandasApiTdsFrame",
+            on: PyLegendOptional[PyLegendUnion[str, PyLegendSequence[str]]] = None,
+            how: PyLegendOptional[str] = "left",
+            lsuffix: str = "",
+            rsuffix: str = "",
+            sort: PyLegendOptional[PyLegendUnion[bool, PyLegendBoolean]] = False,
             validate: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
