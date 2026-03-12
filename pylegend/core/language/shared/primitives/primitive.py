@@ -114,6 +114,10 @@ class PyLegendPrimitive(metaclass=ABCMeta):
         from pylegend.core.language.shared.primitives.string import PyLegendString
         return PyLegendString(PyLegendPrimitiveToStringExpression(self.value()))
 
+    @grammar_method
+    def toString(self) -> "PyLegendString":
+        return self.to_string()
+
     @staticmethod
     def __validate_param_to_be_primitive(
             param: "PyLegendUnion[int, float, bool, str, date, datetime, PyLegendPrimitive]",
